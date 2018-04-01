@@ -1,21 +1,45 @@
-
-# The Annotated "Attention is All You Need"
-
-> ### By Alexander Rush (@harvardnlp)
-
-
-
-> When I teach machine learning, I often tell students that it is impossible to understand recent papers without getting their hands dirty and jumping in. While ideally math should communicate what exactly is going on, many of the "details" turn out to be quite important to getting good results.
-
-> The following is an exercise in practicing what I preach. The recent ["Attention is All You Need"/Transformer](https://arxiv.org/abs/1706.03762) paper from NIPS 2017 has been an instantly impactful paper in machine translation and likely NLP generally. The paper reads in a very clean way, but the conventional wisdom has been that it is very difficult to implement correctly. 
-
-> This blog post presents an annotated guide to the paper. My goal is to implement every detail from the paper (and its references) inline with the paper itself. To do so, I will interleave the text from the paper, with a line-by-line PyTorch re-implementation. (I have done a bit of reordering of the original paper, and skip some of the non-implementation sections for brevity).
-
-> This document itself is a working notebook, that should be usable as a Transformer implementation. To run it first install [PyTorch](http://pytorch.org/) and [torchtext](https://github.com/pytorch/text). 
+---
+layout: post
+title: "Attention"
+tags:
+    - python
+    - notebook
+--- 
+ 
+By Alexander Rush (@harvardnlp)
 
 
+---------------------------
 
-```python
+> When I teach machine learning, I often tell students that it is impossible to
+understand recent papers without getting their hands dirty and jumping in. While
+ideally math should communicate what exactly is going on, many of the "details"
+turn out to be quite important to getting good results.
+>
+> The following is an exercise in practicing what I preach. The recent
+["Attention is All You Need"/Transformer](https://arxiv.org/abs/1706.03762)
+paper from NIPS 2017 has been an instantly impactful paper in machine
+translation and likely NLP generally. The paper reads in a very clean way, but
+the conventional wisdom has been that it is very difficult to implement
+correctly.
+>
+> This blog post presents an annotated guide to the paper. My goal is to
+implement every detail from the paper (and its references) inline with the paper
+itself. To do so, I will interleave the text from the paper, with a line-by-line
+PyTorch re-implementation. (I have done a bit of reordering of the original
+paper, and skip some of the non-implementation sections for brevity).
+>
+> This document itself is a working notebook, that should be usable as a
+Transformer implementation. To run it first install
+[PyTorch](http://pytorch.org/) and [torchtext](https://github.com/pytorch/text).
+{: .class1 .class2}
+
+------------------------------------
+
+* Will be replaced with the ToC, excluding the "Contents" header
+{:toc}
+
+{% highlight python %}
 import numpy as np
 import torch
 import torch.nn as nn
@@ -23,23 +47,53 @@ import torch.nn.functional as F
 from torchtext import data, datasets
 import math, copy
 from torch.autograd import Variable
-```
-
-# Abstract 
-The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being  more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU.  On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the Transformer generalizes well to other tasks by applying it successfully to English constituency parsing  both with large and limited training data.
-
-<img src="ModalNet-21.png" width=400px>
-
-# Model
-
-Most competitive neural sequence transduction models have an encoder-decoder structure [(cite)](cho2014learning,bahdanau2014neural,sutskever14). Here, the encoder maps an input sequence of symbol representations $(x_1, ..., x_n)$ to a sequence of continuous representations $\mathbf{z} = (z_1, ..., z_n)$. Given $\mathbf{z}$, the decoder then generates an output sequence $(y_1,...,y_m)$ of symbols one element at a time. At each step the model is auto-regressive [(cite)](graves2013generating), consuming the previously generated symbols as additional input when generating the next.                                                
-                                                                                                                                                                                                                  
-The Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure~1, respectively. 
-
-> Our setup to start will be a standard neural sequence model. We will assume the src and tgt sequences are passed through an encoder, converted to a memory, and passed through a decoder model.
+{% endhighlight %}
 
 
-```python
+
+# Abstract
+
+The dominant sequence transduction models are based on complex recurrent or
+convolutional neural networks that include an encoder and a decoder. The best
+performing models also connect the encoder and decoder through an attention
+mechanism. We propose a new simple network architecture, the Transformer, based
+solely on attention mechanisms, dispensing with recurrence and convolutions
+entirely. Experiments on two machine translation tasks show these models to be
+superior in quality while being  more parallelizable and requiring significantly
+less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-
+German translation task, improving over the existing best results, including
+ensembles, by over 2 BLEU.  On the WMT 2014 English-to-French translation task,
+our model establishes a new single-model state-of-the-art BLEU score of 41.8
+after training for 3.5 days on eight GPUs, a small fraction of the training
+costs of the best models from the literature. We show that the Transformer
+generalizes well to other tasks by applying it successfully to English
+constituency parsing  both with large and limited training data. 
+
+
+
+<img src="ModalNet-21.png" width=400px> 
+ 
+# Model 
+ 
+Most competitive neural sequence transduction models have an encoder-decoder
+structure [(cite)](cho2014learning,bahdanau2014neural,sutskever14). Here, the
+encoder maps an input sequence of symbol representations $(x_1, ..., x_n)$ to a
+sequence of continuous representations $\mathbf{z} = (z_1, ..., z_n)$. Given
+$\mathbf{z}$, the decoder then generates an output sequence $(y_1,...,y_m)$ of
+symbols one element at a time. At each step the model is auto-regressive
+[(cite)](graves2013generating), consuming the previously generated symbols as
+additional input when generating the next.
+
+The Transformer follows this overall architecture using stacked self-attention
+and point-wise, fully connected layers for both the encoder and decoder, shown
+in the left and right halves of Figure~1, respectively. 
+ 
+> Our setup to start will be a standard neural sequence model. We will assume
+the src and tgt sequences are passed through an encoder, converted to a memory,
+and passed through a decoder model. 
+
+
+{% highlight python %}
 class EncoderDecoder(nn.Module):
     def __init__(self, encoder, decoder, src_embed, tgt_embed, generator, pad_idx):
         super(EncoderDecoder, self).__init__()
@@ -58,23 +112,23 @@ class EncoderDecoder(nn.Module):
         output = self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
         return output
 
-```
+{% endhighlight %}
+ 
+## Encoder and Decoder Stacks
 
-## Encoder and Decoder Stacks                                                                                                                                                                                
-                                                                                                                                                                                                                                                                                                                     
-### Encoder: 
+### Encoder:
 
 The encoder is composed of a stack of $N=6$ identical layers. 
 
 
-```python
+{% highlight python %}
 def clones(module, N):
     "Produces N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 class Encoder(nn.Module):
     "Core encoder is a stack of N layers"
     def __init__(self, layer, N):
@@ -87,12 +141,13 @@ class Encoder(nn.Module):
         for layer in self.layers:
             x = layer(x, mask)
         return self.norm(x)
-```
+{% endhighlight %}
+ 
+We employ a residual connection [(cite)](he2016deep) around each of the two sub-
+layers, followed by layer normalization [(cite)](layernorm2016). 
 
-We employ a residual connection [(cite)](he2016deep) around each of the two sub-layers, followed by layer normalization [(cite)](layernorm2016).  
 
-
-```python
+{% highlight python %}
 class LayerNorm(nn.Module):
     "Construct a layernorm module based on above citation."
     def __init__(self, features, eps=1e-6):
@@ -105,12 +160,16 @@ class LayerNorm(nn.Module):
         mean = x.mean(-1, keepdim=True)
         std = x.std(-1, keepdim=True)
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
-```
+{% endhighlight %}
+ 
+That is, the output of each sub-layer is $\mathrm{LayerNorm}(x +
+\mathrm{Sublayer}(x))$, where $\mathrm{Sublayer}(x)$ is the function implemented
+by the sub-layer itself.  We apply dropout \citep{srivastava2014dropout} to the
+output of each sub-layer, before it is added to the sub-layer input and
+normalized. 
 
-That is, the output of each sub-layer is $\mathrm{LayerNorm}(x + \mathrm{Sublayer}(x))$, where $\mathrm{Sublayer}(x)$ is the function implemented by the sub-layer itself.  We apply dropout \citep{srivastava2014dropout} to the output of each sub-layer, before it is added to the sub-layer input and normalized.   
 
-
-```python
+{% highlight python %}
 class SublayerConnection(nn.Module):
     "A residual connection followed by a layer norm."
     def __init__(self, size, dropout):
@@ -120,14 +179,17 @@ class SublayerConnection(nn.Module):
 
     def forward(self, x, sublayer):
         return x + self.dropout(sublayer(self.norm(x)))
-```
+{% endhighlight %}
+ 
+To facilitate these residual connections, all sub-layers in the model, as well
+as the embedding layers, produce outputs of dimension $d_{\text{model}}=512$. 
+ 
+Each layer has two sub-layers. The first is a multi-head self-attention
+mechanism, and the second is a simple, position-wise fully connected feed-
+forward network. 
 
-To facilitate these residual connections, all sub-layers in the model, as well as the embedding layers, produce outputs of dimension $d_{\text{model}}=512$.   
 
-Each layer has two sub-layers. The first is a multi-head self-attention mechanism, and the second is a simple, position-wise fully connected feed-forward network.
-
-
-```python
+{% highlight python %}
 class EncoderLayer(nn.Module):
     "Encoder is made up of two sublayers, self attn and feed forward."
     def __init__(self, size, self_attn, feed_forward, dropout):
@@ -140,15 +202,15 @@ class EncoderLayer(nn.Module):
     def forward(self, x, mask):
         x = self.sublayer[0](x, lambda x: self.self_attn(x, mask=mask))
         return self.sublayer[1](x, self.feed_forward)
-```
-
+{% endhighlight %}
+ 
 ### Decoder:
 
-The decoder is also composed of a stack of $N=6$ identical layers.  
+The decoder is also composed of a stack of $N=6$ identical layers.
+ 
 
 
-
-```python
+{% highlight python %}
 class Decoder(nn.Module):
     def __init__(self, layer, N):
         super(Decoder, self).__init__()
@@ -159,12 +221,15 @@ class Decoder(nn.Module):
         for layer in self.layers:
             x = layer(x, memory, src_mask, tgt_mask)
         return self.norm(x)
-```
+{% endhighlight %}
+ 
+In addition to the two sub-layers in each encoder layer, the decoder inserts a
+third sub-layer, which performs multi-head attention over the output of the
+encoder stack.  Similar to the encoder, we employ residual connections around
+each of the sub-layers, followed by layer normalization. 
 
-In addition to the two sub-layers in each encoder layer, the decoder inserts a third sub-layer, which performs multi-head attention over the output of the encoder stack.  Similar to the encoder, we employ residual connections around each of the sub-layers, followed by layer normalization.  
 
-
-```python
+{% highlight python %}
 class DecoderLayer(nn.Module):
     def __init__(self, size, self_attn, src_attn, feed_forward, dropout):
         super(DecoderLayer, self).__init__()
@@ -179,78 +244,123 @@ class DecoderLayer(nn.Module):
         x = self.sublayer[0](x, lambda x: self.self_attn(x, mask=tgt_mask))
         x = self.sublayer[1](x, lambda x: self.src_attn(x, m, m, src_mask))
         return self.sublayer[2](x, self.feed_forward)
-```
+{% endhighlight %}
+ 
+We also modify the self-attention sub-layer in the decoder stack to prevent
+positions from attending to subsequent positions.  This masking, combined with
+fact that the output embeddings are offset by one position, ensures that the
+predictions for position $i$ can depend only on the known outputs at positions
+less than $i$. 
 
-We also modify the self-attention sub-layer in the decoder stack to prevent positions from attending to subsequent positions.  This masking, combined with fact that the output embeddings are offset by one position, ensures that the predictions for position $i$ can depend only on the known outputs at positions less than $i$.
 
-
-```python
+{% highlight python %}
 def subsequent_mask(size):
     "Mask out subsequent positions."
     attn_shape = (1, size, size)
     subsequent_mask = np.triu(np.ones(attn_shape), k=1).astype('uint8')
     return torch.from_numpy(subsequent_mask) == 0
-```
-
-<img width="220px" src="ModalNet-19.png">
-
-### Attention:                                                                                                                                                                                                                                                                               
-An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.  The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.                                                                                                             
-
-
-#### Scaled Dot-Product Attention                                                                                                                                                                               
-
-We call our particular attention "Scaled Dot-Product Attention" (Figure 2).   The input consists of queries and keys of dimension $d_k$, and values of dimension $d_v$.  We compute the dot products of the query with all keys, divide each by $\sqrt{d_k}$, and apply a softmax function to obtain the weights on the values.                                                                                                         
-
-In practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix $Q$.   The keys and values are also packed together into matrices $K$ and $V$.  We compute the matrix of outputs as:                      
-                                                                 
-$$                                                                         
-   \mathrm{Attention}(Q, K, V) = \mathrm{softmax}(\frac{QK^T}{\sqrt{d_k}})V               
-$$                                                                                                                                                                                                        
-                                                                                                                                                                     
+{% endhighlight %}
+ 
+<img width="220px" src="ModalNet-19.png"> 
+ 
+### Attention:
+An attention function can be described as mapping a query and a set of key-value
+pairs to an output, where the query, keys, values, and output are all vectors.
+The output is computed as a weighted sum of the values, where the weight
+assigned to each value is computed by a compatibility function of the query with
+the corresponding key.
 
 
-```python
+#### Scaled Dot-Product Attention
+
+We call our particular attention "Scaled Dot-Product Attention" (Figure 2).
+The input consists of queries and keys of dimension $d_k$, and values of
+dimension $d_v$.  We compute the dot products of the query with all keys, divide
+each by $\sqrt{d_k}$, and apply a softmax function to obtain the weights on the
+values.
+
+In practice, we compute the attention function on a set of queries
+simultaneously, packed together into a matrix $Q$.   The keys and values are
+also packed together into matrices $K$ and $V$.  We compute the matrix of
+outputs as:
+
+$$
+   \mathrm{Attention}(Q, K, V) = \mathrm{softmax}(\frac{QK^T}{\sqrt{d_k}})V
+$$
+ 
+
+
+{% highlight python %}
 def attention(query, key, value, mask=None, dropout=0.0):
     scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(query.size(-1))
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
     attn = F.softmax(scores, dim = -1)
     return torch.matmul(F.dropout(attn, p=dropout), value), attn
-```
-
-The two most commonly used attention functions are additive attention \citep{bahdanau2014neural}, and dot-product (multiplicative) attention.  Dot-product attention is identical to our algorithm, except for the scaling factor of $\frac{1}{\sqrt{d_k}}$. Additive attention computes the compatibility function using a feed-forward network with a single hidden layer.  While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code.                                                                                             
-
-                                                                        
-While for small values of $d_k$ the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of $d_k$ \citep{DBLP:journals/corr/BritzGLL17}. We suspect that for large values of $d_k$, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients  \footnote{To illustrate why the dot products get large, assume that the components of $q$ and $k$ are independent random variables with mean $0$ and variance $1$.  Then their dot product, $q \cdot k = \sum_{i=1}^{d_k} q_ik_i$, has mean $0$ and variance $d_k$.}. To counteract this effect, we scale the dot products by $\frac{1}{\sqrt{d_k}}$.          
-
+{% endhighlight %}
  
+The two most commonly used attention functions are additive attention
+\citep{bahdanau2014neural}, and dot-product (multiplicative) attention.  Dot-
+product attention is identical to our algorithm, except for the scaling factor
+of $\frac{1}{\sqrt{d_k}}$. Additive attention computes the compatibility
+function using a feed-forward network with a single hidden layer.  While the two
+are similar in theoretical complexity, dot-product attention is much faster and
+more space-efficient in practice, since it can be implemented using highly
+optimized matrix multiplication code.
 
-### Multi-Head Attention                                                                                                                                                                                                                                                                                                                                                                                                                               
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-Instead of performing a single attention function with $d_{\text{model}}$-dimensional keys, values and queries, we found it beneficial to linearly project the queries, keys and values $h$ times with different, learned linear projections to $d_k$, $d_k$ and $d_v$ dimensions, respectively.                                                                                                                                                                                                   
-On each of these projected versions of queries, keys and values we then perform the attention function in parallel, yielding $d_v$-dimensional output values. These are concatenated and once again projected, resulting in the final values:
+
+While for small values of $d_k$ the two mechanisms perform similarly, additive
+attention outperforms dot product attention without scaling for larger values of
+$d_k$ \citep{DBLP:journals/corr/BritzGLL17}. We suspect that for large values of
+$d_k$, the dot products grow large in magnitude, pushing the softmax function
+into regions where it has extremely small gradients  \footnote{To illustrate why
+the dot products get large, assume that the components of $q$ and $k$ are
+independent random variables with mean $0$ and variance $1$.  Then their dot
+product, $q \cdot k = \sum_{i=1}^{d_k} q_ik_i$, has mean $0$ and variance
+$d_k$.}. To counteract this effect, we scale the dot products by
+$\frac{1}{\sqrt{d_k}}$. 
+ 
+ 
+ 
+### Multi-Head Attention
+
+Instead of performing a single attention function with
+$d_{\text{model}}$-dimensional keys, values and queries, we found it beneficial
+to linearly project the queries, keys and values $h$ times with different,
+learned linear projections to $d_k$, $d_k$ and $d_v$ dimensions, respectively.
+On each of these projected versions of queries, keys and values we then perform
+the attention function in parallel, yielding $d_v$-dimensional output values.
+These are concatenated and once again projected, resulting in the final values:
 
 <img width="270px" src="ModalNet-20.png">
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions. With a single attention head, averaging inhibits this.                                                                                                                                                                                                                                                                                             
-    
-    
-   
-$$    
-\mathrm{MultiHead}(Q, K, V) = \mathrm{Concat}(\mathrm{head_1}, ..., \mathrm{head_h})W^O    \\                                           
-    \text{where}~\mathrm{head_i} = \mathrm{Attention}(QW^Q_i, KW^K_i, VW^V_i)                                
-$$                                                                                                                                                                                                                                                                                                                                                                         
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-Where the projections are parameter matrices $W^Q_i \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $W^K_i \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $W^V_i \in \mathbb{R}^{d_{\text{model}} \times d_v}$ and $W^O \in \mathbb{R}^{hd_v \times d_{\text{model}}}$.                                                                                                                                                                                                                                                        
-   
 
-   
-In this work we employ $h=8$ parallel attention layers, or heads. For each of these we use $d_k=d_v=d_{\text{model}}/h=64$.                                                                                                                                                                                                                                                                                                                                                                        
-Due to the reduced dimension of each head, the total computational cost is similar to that of single-head attention with full dimensionality.   
+Multi-head attention allows the model to jointly attend to information from
+different representation subspaces at different positions. With a single
+attention head, averaging inhibits this.
 
 
-```python
+
+$$
+\mathrm{MultiHead}(Q, K, V) = \mathrm{Concat}(\mathrm{head_1}, ...,
+\mathrm{head_h})W^O    \\
+    \text{where}~\mathrm{head_i} = \mathrm{Attention}(QW^Q_i, KW^K_i, VW^V_i)
+$$
+
+Where the projections are parameter matrices $W^Q_i \in
+\mathbb{R}^{d_{\text{model}} \times d_k}$, $W^K_i \in
+\mathbb{R}^{d_{\text{model}} \times d_k}$, $W^V_i \in
+\mathbb{R}^{d_{\text{model}} \times d_v}$ and $W^O \in \mathbb{R}^{hd_v \times
+d_{\text{model}}}$.
+
+
+
+In this work we employ $h=8$ parallel attention layers, or heads. For each of
+these we use $d_k=d_v=d_{\text{model}}/h=64$.
+Due to the reduced dimension of each head, the total computational cost is
+similar to that of single-head attention with full dimensionality. 
+
+
+{% highlight python %}
 class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1):
         super(MultiHeadedAttention, self).__init__()
@@ -278,24 +388,44 @@ class MultiHeadedAttention(nn.Module):
         x, self.attn = attention(query, key, value, mask=mask, dropout=self.p)
         x = unshape(x)
         return self.linears[-1](x)
-```
+{% endhighlight %}
+ 
+### Applications of Attention in our Model
+The Transformer uses multi-head attention in three different ways:
+* In "encoder-decoder attention" layers, the queries come from the previous
+decoder layer, and the memory keys and values come from the output of the
+encoder.   This allows every position in the decoder to attend over all
+positions in the input sequence.  This mimics the typical encoder-decoder
+attention mechanisms in sequence-to-sequence models such as \citep{wu2016google,
+bahdanau2014neural,JonasFaceNet2017}.
+* The encoder contains self-attention layers.  In a self-attention layer all of
+the keys, values and queries come from the same place, in this case, the output
+of the previous layer in the encoder.   Each position in the encoder can attend
+to all positions in the previous layer of the encoder.
+* Similarly, self-attention layers in the decoder allow each position in the
+decoder to attend to all positions in the decoder up to and including that
+position.  We need to prevent leftward information flow in the decoder to
+preserve the auto-regressive property.  We implement this inside of scaled dot-
+product attention by masking out (setting to $-\infty$) all values in the input
+of the softmax which correspond to illegal connections.  See
+Figure~\ref{fig:multi-head-att}. 
+ 
+## Position-wise Feed-Forward Networks
 
-### Applications of Attention in our Model                                                                                                                                                      
-The Transformer uses multi-head attention in three different ways:                                                        
-* In "encoder-decoder attention" layers, the queries come from the previous decoder layer, and the memory keys and values come from the output of the encoder.   This allows every position in the decoder to attend over all positions in the input sequence.  This mimics the typical encoder-decoder attention mechanisms in sequence-to-sequence models such as \citep{wu2016google, bahdanau2014neural,JonasFaceNet2017}.                                                        
-* The encoder contains self-attention layers.  In a self-attention layer all of the keys, values and queries come from the same place, in this case, the output of the previous layer in the encoder.   Each position in the encoder can attend to all positions in the previous layer of the encoder.                                                                
-* Similarly, self-attention layers in the decoder allow each position in the decoder to attend to all positions in the decoder up to and including that position.  We need to prevent leftward information flow in the decoder to preserve the auto-regressive property.  We implement this inside of scaled dot-product attention by masking out (setting to $-\infty$) all values in the input of the softmax which correspond to illegal connections.  See Figure~\ref{fig:multi-head-att}.                                                                                                                                                                                                                                                                                                                           
+In addition to attention sub-layers, each of the layers in our encoder and
+decoder contains a fully connected feed-forward network, which is applied to
+each position separately and identically.  This consists of two linear
+transformations with a ReLU activation in between.
 
-## Position-wise Feed-Forward Networks                                                                                                                                                                                                                                                                                                                                                             
-                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-In addition to attention sub-layers, each of the layers in our encoder and decoder contains a fully connected feed-forward network, which is applied to each position separately and identically.  This consists of two linear transformations with a ReLU activation in between.
+$$\mathrm{FFN}(x)=\max(0, xW_1 + b_1) W_2 + b_2$$
 
-$$\mathrm{FFN}(x)=\max(0, xW_1 + b_1) W_2 + b_2$$                                                                                                                                                                                                                                                         
-                                                                                                                                                                                                                                                        
-While the linear transformations are the same across different positions, they use different parameters from layer to layer. Another way of describing this is as two convolutions with kernel size 1.  The dimensionality of input and output is $d_{\text{model}}=512$, and the inner-layer has dimensionality $d_{ff}=2048$. 
+While the linear transformations are the same across different positions, they
+use different parameters from layer to layer. Another way of describing this is
+as two convolutions with kernel size 1.  The dimensionality of input and output
+is $d_{\text{model}}=512$, and the inner-layer has dimensionality $d_{ff}=2048$. 
 
 
-```python
+{% highlight python %}
 class PositionwiseFeedForward(nn.Module):
     def __init__(self, d_model, d_ff, dropout=0.1):
         super(PositionwiseFeedForward, self).__init__()
@@ -305,13 +435,22 @@ class PositionwiseFeedForward(nn.Module):
 
     def forward(self, x):
         return self.w_2(self.dropout(F.relu(self.w_1(x))))
-```
+{% endhighlight %}
+ 
+## Embeddings and Softmax
+Similarly to other sequence transduction models, we use learned embeddings to
+convert the input tokens and output tokens to vectors of dimension
+$d_{\text{model}}$.  We also use the usual learned linear transformation and
+softmax function to convert the decoder output to predicted next-token
+probabilities.  In our model, we share the same weight matrix between the two
+embedding layers and the pre-softmax linear transformation, similar to
+\citep{press2016using}.   In the embedding layers, we multiply those weights by
+$\sqrt{d_{\text{model}}}$. In addition, we apply dropout to the sums of the
+embeddings and the positional encodings in both the encoder and decoder stacks.
+For the base model, we use a rate of $P_{drop}=0.1$. 
 
-## Embeddings and Softmax                                                                                                                                                                                                                                                                                           
-Similarly to other sequence transduction models, we use learned embeddings to convert the input tokens and output tokens to vectors of dimension $d_{\text{model}}$.  We also use the usual learned linear transformation and softmax function to convert the decoder output to predicted next-token probabilities.  In our model, we share the same weight matrix between the two embedding layers and the pre-softmax linear transformation, similar to \citep{press2016using}.   In the embedding layers, we multiply those weights by $\sqrt{d_{\text{model}}}$. In addition, we apply dropout to the sums of the embeddings and the positional encodings in both the encoder and decoder stacks.  For the base model, we use a rate of $P_{drop}=0.1$.                                                                                                                                 
 
-
-```python
+{% highlight python %}
 class Embeddings(nn.Module):
     def __init__(self, d_model, vocab):
         super(Embeddings, self).__init__()
@@ -328,21 +467,33 @@ class Generator(nn.Module):
 
     def forward(self, x):
         return F.log_softmax(self.proj(x), dim=-1)
-```
+{% endhighlight %}
+ 
+## Positional Encoding
+Since our model contains no recurrence and no convolution, in order for the
+model to make use of the order of the sequence, we must inject some information
+about the relative or absolute position of the tokens in the sequence.  To this
+end, we add "positional encodings" to the input embeddings at the bottoms of the
+encoder and decoder stacks.  The positional encodings have the same dimension
+$d_{\text{model}}$ as the embeddings, so that the two can be summed.   There are
+many choices of positional encodings, learned and fixed
+\citep{JonasFaceNet2017}.
+In this work, we use sine and cosine functions of different frequencies:
+$$
+    PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}}) \\
+    PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})
+$$
+where $pos$ is the position and $i$ is the dimension.  That is, each dimension
+of the positional encoding corresponds to a sinusoid.  The wavelengths form a
+geometric progression from $2\pi$ to $10000 \cdot 2\pi$.  We chose this function
+because we hypothesized it would allow the model to easily learn to attend by
+relative positions, since for any fixed offset $k$, $PE_{pos+k}$ can be
+represented as a linear function of $PE_{pos}$.
 
-## Positional Encoding                                                                                                                             
-Since our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens in the sequence.  To this end, we add "positional encodings" to the input embeddings at the bottoms of the encoder and decoder stacks.  The positional encodings have the same dimension $d_{\text{model}}$ as the embeddings, so that the two can be summed.   There are many choices of positional encodings, learned and fixed \citep{JonasFaceNet2017}.                                                                                                                                                                                                                                                                                                                                                
-In this work, we use sine and cosine functions of different frequencies:                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  
-$$                                                                                                                                                                                                                                                                                                                                                                                                                                                                            
-    PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}}) \\                                                                                                                                                                                                                                                                                                                                                                                                                                      
-    PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})                                                                                                                                                                                                                                                                                                                                                                                                                                       
-$$                                                                                                                                                                                                                                                        
-where $pos$ is the position and $i$ is the dimension.  That is, each dimension of the positional encoding corresponds to a sinusoid.  The wavelengths form a geometric progression from $2\pi$ to $10000 \cdot 2\pi$.  We chose this function because we hypothesized it would allow the model to easily learn to attend by relative positions, since for any fixed offset $k$, $PE_{pos+k}$ can be represented as a linear function of $PE_{pos}$.                                       
-                                                                                                                                                                                                                                                    
+ 
 
 
-
-```python
+{% highlight python %}
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout, max_len=5000):
         super(PositionalEncoding, self).__init__()
@@ -361,17 +512,21 @@ class PositionalEncoding(nn.Module):
     def forward(self, x):
         x = x + Variable(self.pe[:, :x.size(1)], requires_grad=False)
         return self.dropout(x)
-```
-
-We also experimented with using learned positional embeddings \citep{JonasFaceNet2017} instead, and found that the two versions produced nearly identical results (see Table~\ref{tab:variations} row (E)).  We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.    
-
+{% endhighlight %}
+ 
+We also experimented with using learned positional embeddings
+\citep{JonasFaceNet2017} instead, and found that the two versions produced
+nearly identical results (see Table~\ref{tab:variations} row (E)).  We chose the
+sinusoidal version because it may allow the model to extrapolate to sequence
+lengths longer than the ones encountered during training. 
+ 
 # Training
 
 This section describes the training regime for our models.
+ 
 
 
-
-```python
+{% highlight python %}
 def make_model(src_vocab, tgt_vocab, padding_idx, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1):
     attn = MultiHeadedAttention(h, d_model, dropout)
     ff = PositionwiseFeedForward(d_model, d_ff, dropout)
@@ -390,10 +545,10 @@ def make_model(src_vocab, tgt_vocab, padding_idx, N=6, d_model=512, d_ff=2048, h
         if p.dim() > 1:
             nn.init.xavier_uniform(p)
     return model
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 def loss_backprop(model, criterion, out, targets, norm):
     out_grad = []
     total = 0
@@ -408,14 +563,22 @@ def loss_backprop(model, criterion, out, targets, norm):
     out_grad = torch.stack(out_grad, dim=1)
     out.backward(gradient=out_grad)
     return total
-```
-
+{% endhighlight %}
+ 
 ## Training Data and Batching
 
-We trained on the standard WMT 2014 English-German dataset consisting of about 4.5 million sentence pairs.  Sentences were encoded using byte-pair encoding \citep{DBLP:journals/corr/BritzGLL17}, which has a shared source-target vocabulary of about 37000 tokens. For English-French, we used the significantly larger WMT 2014 English-French dataset consisting of 36M sentences and split tokens into a 32000 word-piece vocabulary \citep{wu2016google}.  Sentence pairs were batched together by approximate sequence length.  Each training batch contained a set of sentence pairs containing approximately 25000 source tokens and 25000 target tokens.     
+We trained on the standard WMT 2014 English-German dataset consisting of about
+4.5 million sentence pairs.  Sentences were encoded using byte-pair encoding
+\citep{DBLP:journals/corr/BritzGLL17}, which has a shared source-target
+vocabulary of about 37000 tokens. For English-French, we used the significantly
+larger WMT 2014 English-French dataset consisting of 36M sentences and split
+tokens into a 32000 word-piece vocabulary \citep{wu2016google}.  Sentence pairs
+were batched together by approximate sequence length.  Each training batch
+contained a set of sentence pairs containing approximately 25000 source tokens
+and 25000 target tokens. 
 
 
-```python
+{% highlight python %}
 # Specialized batching. This seems to really matter.
 global max_src_in_batch, max_tgt_in_batch
 
@@ -429,23 +592,32 @@ def batch_size_fn(new, count, sofar):
     src_elements = count * max_src_in_batch
     tgt_elements = count * max_tgt_in_batch
     return max(src_elements, tgt_elements)
-```
-
-## Hardware and Schedule                                                                                                                                                                                                   
-We trained our models on one machine with 8 NVIDIA P100 GPUs.  For our base models using the hyperparameters described throughout the paper, each training step took about 0.4 seconds.  We trained the base models for a total of 100,000 steps or 12 hours.  For our big models,(described on the bottom line of table \ref{tab:variations}), step time was 1.0 seconds.  The big models were trained for 300,000 steps (3.5 days).
-
+{% endhighlight %}
+ 
+## Hardware and Schedule
+We trained our models on one machine with 8 NVIDIA P100 GPUs.  For our base
+models using the hyperparameters described throughout the paper, each training
+step took about 0.4 seconds.  We trained the base models for a total of 100,000
+steps or 12 hours.  For our big models,(described on the bottom line of table
+\ref{tab:variations}), step time was 1.0 seconds.  The big models were trained
+for 300,000 steps (3.5 days). 
+ 
 ## Optimizer
 
-We used the Adam optimizer~\citep{kingma2014adam} with $\beta_1=0.9$, $\beta_2=0.98$ and $\epsilon=10^{-9}$.  We varied the learning rate over the course of training, according to the formula:                                                                                            
-$$                                                                                                                                                                                                                                                                                         
-lrate = d_{\text{model}}^{-0.5} \cdot                                                                                                                                                                                                                                                                                                
-  \min({step\_num}^{-0.5},                                                                                                                                                                                                                                                                                                  
-    {step\_num} \cdot {warmup\_steps}^{-1.5})                                                                                                                                                                                                                                                                               
-$$                                                                                                                                                                                             
-This corresponds to increasing the learning rate linearly for the first $warmup\_steps$ training steps, and decreasing it thereafter proportionally to the inverse square root of the step number.  We used $warmup\_steps=4000$.                            
+We used the Adam optimizer~\citep{kingma2014adam} with $\beta_1=0.9$,
+$\beta_2=0.98$ and $\epsilon=10^{-9}$.  We varied the learning rate over the
+course of training, according to the formula:
+$$
+lrate = d_{\text{model}}^{-0.5} \cdot
+  \min({step\_num}^{-0.5},
+    {step\_num} \cdot {warmup\_steps}^{-1.5})
+$$
+This corresponds to increasing the learning rate linearly for the first
+$warmup\_steps$ training steps, and decreasing it thereafter proportionally to
+the inverse square root of the step number.  We used $warmup\_steps=4000$. 
 
 
-```python
+{% highlight python %}
 class NoamOpt:
     def __init__(self, model_size, factor, warmup, optimizer):
         self.optimizer = optimizer
@@ -471,16 +643,18 @@ class NoamOpt:
 def get_opt(model):
     return NoamOpt(model.src_embed[0].d_model, 2, 4000,
             torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-```
+{% endhighlight %}
+ 
+## Regularization
 
-## Regularization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-                                                                                                                                                                                                                                                                                                                      
 ### Label Smoothing
 
-During training, we employed label smoothing of value $\epsilon_{ls}=0.1$ \citep{DBLP:journals/corr/SzegedyVISW15}.  This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.  
+During training, we employed label smoothing of value $\epsilon_{ls}=0.1$
+\citep{DBLP:journals/corr/SzegedyVISW15}.  This hurts perplexity, as the model
+learns to be more unsure, but improves accuracy and BLEU score. 
 
 
-```python
+{% highlight python %}
 class LabelSmoothing(nn.Module):
     def __init__(self, size, padding_idx, label_smoothing=0.0):
         super(LabelSmoothing, self).__init__()
@@ -501,12 +675,12 @@ class LabelSmoothing(nn.Module):
             tmp_.index_fill_(0, mask, 0)
         gtruth = Variable(tmp_, requires_grad=False)
         return self.criterion(x, gtruth)
-```
+{% endhighlight %}
+ 
+# Putting it all together. 
 
-# Putting it all together.
 
-
-```python
+{% highlight python %}
 # Load words from IWSLT
 
 #!pip install torchtext spacy
@@ -541,10 +715,10 @@ def load():
     BATCH_SIZE = 32
     train_iter, val_iter = data.BucketIterator.splits((train, val), batch_size=BATCH_SIZE, device=0,
                                                       repeat=False, sort_key=lambda x: len(x.src))
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 BOS_WORD = '<s>'
 EOS_WORD = '</s>'
 BLANK_WORD = "<blank>"
@@ -559,10 +733,10 @@ train = datasets.TranslationDataset(path="/n/home00/srush/Data/baseline-1M_train
                                          len(vars(x)['trg']) <= MAX_LEN)
 SRC.build_vocab(train.src, max_size=50000)
 TGT.build_vocab(train.trg, max_size=50000)
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 def train_epoch(train_iter, model, criterion, opt):
     for i, batch in enumerate(train_iter):
         src, trg = batch.src.transpose(0, 1), batch.trg.transpose(0, 1)
@@ -574,26 +748,26 @@ def train_epoch(train_iter, model, criterion, opt):
         model_opt.optimizer.zero_grad()
         if i % 100 == 1:
             print(i, loss, model_opt._rate)
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 def valid_epoch(valid_iter, model, criterion):
     for batch in valid_iter:
         src, trg = batch.src.transpose(0, 1), batch.trg.transpose(0, 1)
         out = model.forward(src, trg[:, :-1])
         loss = loss_backprop(model, criterion, out, trg[:, 1:], 
                              (trg[:, 1:] == pad_idx).data.sum())
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 pad_idx = TGT.vocab.stoi["<blank>"]
 print(pad_idx)
 model = make_model(len(SRC.vocab), len(TGT.vocab), pad_idx, N=6)
 model_opt = get_opt(model)
 model.cuda()
-```
+{% endhighlight %}
 
     1
 
@@ -1040,7 +1214,7 @@ model.cuda()
 
 
 
-```python
+{% highlight python %}
 BATCH_SIZE = 4096
 class MyIterator(data.Iterator):
     def create_batches(self):
@@ -1062,22 +1236,22 @@ class MyIterator(data.Iterator):
 train_iter = MyIterator(train, batch_size=BATCH_SIZE, device=0,
                         repeat=False, sort_key=lambda x: (len(x.src), len(x.trg)),
                         batch_size_fn=batch_size_fn)
-```
+{% endhighlight %}
 
 
-```python
+{% highlight python %}
 print(pad_idx)
 print(len(SRC.vocab))
-```
+{% endhighlight %}
 
     1
     50002
 
 
 
-```python
+{% highlight python %}
 torch.save(model, "/n/rush_lab/trans_ipython.pt")
-```
+{% endhighlight %}
 
     /n/home00/srush/.conda/envs/py3/lib/python3.6/site-packages/torch/serialization.py:158: UserWarning: Couldn't retrieve source code for container of type EncoderDecoder. It won't be checked for correctness upon loading.
       "type " + obj.__name__ + ". It won't be checked "
@@ -1106,7 +1280,7 @@ torch.save(model, "/n/rush_lab/trans_ipython.pt")
 
 
 
-```python
+{% highlight python %}
 #weight = torch.ones(len(TGT.vocab))
 #weight[pad_idx] = 0
 #criterion = nn.NLLLoss(size_average=False, weight=weight.cuda())
@@ -1114,7 +1288,7 @@ criterion = LabelSmoothing(size=len(TGT.vocab), padding_idx=pad_idx, label_smoot
 criterion.cuda()
 for epoch in range(15):
     train_epoch(train_iter, model, criterion, model_opt)
-```
+{% endhighlight %}
 
     1 3.269582842476666 0.0005377044714644026
     101 3.300532897672383 0.0005726430336128369
@@ -2085,7 +2259,7 @@ for epoch in range(15):
 
 
 
-```python
+{% highlight python %}
 1 10.825187489390373 6.987712429686844e-07
 101 9.447168171405792 3.56373333914029e-05
 201 7.142856806516647 7.057589553983712e-05
@@ -2149,4 +2323,4 @@ for epoch in range(15):
 6001 2.496141305891797 0.0011408985275576757
 6101 2.6422974687084206 0.0011315113470699342
 6201 2.448802186456305 0.0011223521277270118
-```
+{% endhighlight %}
