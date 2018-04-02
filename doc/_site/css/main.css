@@ -37,6 +37,10 @@ img {
   max-width: 100%;
   vertical-align: middle; }
 
+img {
+  display: block;
+  margin: 0 auto; }
+
 /**
  * Figures
  */
