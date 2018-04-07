@@ -9,8 +9,34 @@
     % Nicer default font (+ math font) than Computer Modern for most use cases
     \usepackage{times}
     \usepackage{latexsym}
+
+    \title{The Annotated Transformer}
+    \author{Alexander M. Rush}
+
+
 ((* endblock docclass *))
 
-((* block input_group *))
-(( cell.source ))
-((* endblock input_group *))
+
+((* block input scoped *))
+
+    \begin{tiny}
+        \noindent
+    \begin{Verbatim}[commandchars=\\\{\}]
+((( cell.source | highlight_code(strip_verbatim=True, metadata=cell.metadata) )))
+    \end{Verbatim}
+     \end{tiny}
+((* endblock input *))
+
+
+((* block execute_result scoped *))
+    \noindent
+    \begin{tiny}
+    ((*- for type in output.data | filter_data_type -*))
+       ((*- if type in ['text/plain'] *))
+              ((( output.data['text/plain'] )))
+       ((*- else -*))
+              ((( super() )))
+       ((*- endif -*))
+    ((*- endfor -*))
+    \end{tiny}
+((* endblock execute_result *))
