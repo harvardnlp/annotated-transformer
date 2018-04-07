@@ -1,0 +1,539 @@
+
+%
+% 2018: modified line numbering to be in gainsboro gray color so one
+% can write comments on the margins.	-- Shay Cohen / Kevin Gimpel / Wei Lu
+
+% 2017: modified to support DOI links in bibliography.  Now uses
+% natbib package rather than defining citation commands in this file.
+% Use with acl_natbib.bst bib style.  -- Dan Gildea
+
+% This is the LaTeX style for ACL 2016. It contains Margaret Mitchell's
+% line number adaptations (ported by Hai Zhao and Yannick Versley).
+
+% It is nearly identical to the style files for ACL 2015,
+% ACL 2014, EACL 2006, ACL2005, ACL 2002, ACL 2001, ACL 2000,
+% EACL 95 and EACL 99. 
+%
+% Changes made include: adapt layout to A4 and centimeters, widen abstract
+
+% This is the LaTeX style file for ACL 2000.  It is nearly identical to the
+% style files for EACL 95 and EACL 99.  Minor changes include editing the
+% instructions to reflect use of \documentclass rather than \documentstyle
+% and removing the white space before the title on the first page
+% -- John Chen, June 29, 2000
+
+% This is the LaTeX style file for EACL-95.  It is identical to the
+% style file for ANLP '94 except that the margins are adjusted for A4
+% paper.  -- abney 13 Dec 94
+
+% The ANLP '94 style file is a slightly modified
+% version of the style used for AAAI and IJCAI, using some changes
+% prepared by Fernando Pereira and others and some minor changes 
+% by Paul Jacobs.
+
+% Papers prepared using the aclsub.sty file and acl.bst bibtex style
+% should be easily converted to final format using this style.  
+% (1) Submission information (\wordcount, \subject, and \makeidpage)
+% should be removed.
+% (2) \summary should be removed.  The summary material should come
+% after \maketitle and should be in the ``abstract'' environment
+% (between \begin{abstract} and \end{abstract}).
+% (3) Check all citations.  This style should handle citations correctly
+% and also allows multiple citations separated by semicolons.
+% (4) Check figures and examples.  Because the final format is double-
+% column, some adjustments may have to be made to fit text in the column
+% or to choose full-width (\figure*} figures.
+
+% Place this in a file called aclap.sty in the TeX search path.  
+% (Placing it in the same directory as the paper should also work.)
+
+% Prepared by Peter F. Patel-Schneider, liberally using the ideas of
+% other style hackers, including Barbara Beeton.
+% This style is NOT guaranteed to work.  It is provided in the hope
+% that it will make the preparation of papers easier.
+%
+% There are undoubtably bugs in this style.  If you make bug fixes,
+% improvements, etc.  please let me know.  My e-mail address is:
+%       pfps@research.att.com
+
+% Papers are to be prepared using the ``acl_natbib'' bibliography style,
+% as follows:
+%       \documentclass[11pt]{article}
+%       \usepackage{acl2000}
+%       \title{Title}
+%       \author{Author 1 \and Author 2 \\ Address line \\ Address line \And
+%               Author 3 \\ Address line \\ Address line}
+%       \begin{document}
+%       ...
+%       \bibliography{bibliography-file}
+%       \bibliographystyle{acl_natbib}
+%       \end{document}
+
+% Author information can be set in various styles:
+% For several authors from the same institution:
+% \author{Author 1 \and ... \and Author n \\
+%         Address line \\ ... \\ Address line}
+% if the names do not fit well on one line use
+%         Author 1 \\ {\bf Author 2} \\ ... \\ {\bf Author n} \\
+% For authors from different institutions:
+% \author{Author 1 \\ Address line \\  ... \\ Address line
+%         \And  ... \And
+%         Author n \\ Address line \\ ... \\ Address line}
+% To start a seperate ``row'' of authors use \AND, as in
+% \author{Author 1 \\ Address line \\  ... \\ Address line
+%         \AND
+%         Author 2 \\ Address line \\ ... \\ Address line \And
+%         Author 3 \\ Address line \\ ... \\ Address line}
+
+% If the title and author information does not fit in the area allocated,
+% place \setlength\titlebox{<new height>} right after
+% \usepackage{acl2015}
+% where <new height> can be something larger than 5cm
+
+% include hyperref, unless user specifies nohyperref option like this:
+% \usepackage[nohyperref]{acl2018}
+\newif\ifacl@hyperref
+\DeclareOption{hyperref}{\acl@hyperreftrue}
+\DeclareOption{nohyperref}{\acl@hyperreffalse}
+\ExecuteOptions{hyperref} % default is to use hyperref
+\ProcessOptions\relax
+\ifacl@hyperref
+  \RequirePackage{hyperref}
+  \usepackage{xcolor}		% make links dark blue
+  \definecolor{darkblue}{rgb}{0, 0, 0.5}
+  \hypersetup{colorlinks=true,citecolor=darkblue, linkcolor=darkblue, urlcolor=darkblue}
+\else
+  % This definition is used if the hyperref package is not loaded.
+  % It provides a backup, no-op definiton of \href.
+  % This is necessary because \href command is used in the acl_natbib.bst file.
+  \def\href#1#2{{#2}}
+  % We still need to load xcolor in this case because the lighter line numbers require it. (SC/KG/WL) 
+  \usepackage{xcolor}
+\fi
+
+\typeout{Conference Style for ACL 2018}
+
+% NOTE:  Some laser printers have a serious problem printing TeX output.
+% These printing devices, commonly known as ``write-white'' laser
+% printers, tend to make characters too light.  To get around this
+% problem, a darker set of fonts must be created for these devices.
+%
+
+\newcommand{\Thanks}[1]{\thanks{\ #1}}
+
+% A4 modified by Eneko; again modified by Alexander for 5cm titlebox
+\setlength{\paperwidth}{21cm}   % A4
+\setlength{\paperheight}{29.7cm}% A4
+\setlength\topmargin{-0.5cm}    
+\setlength\oddsidemargin{0cm}   
+\setlength\textheight{24.7cm} 
+\setlength\textwidth{16.0cm}
+\setlength\columnsep{0.6cm}  
+\newlength\titlebox 
+\setlength\titlebox{5cm}
+\setlength\headheight{5pt}   
+\setlength\headsep{0pt}
+\thispagestyle{empty}        
+\pagestyle{empty}
+
+
+\flushbottom \twocolumn \sloppy
+
+% We're never going to need a table of contents, so just flush it to
+% save space --- suggested by drstrip@sandia-2
+\def\addcontentsline#1#2#3{}
+
+\newif\ifaclfinal
+\aclfinalfalse
+\def\aclfinalcopy{\global\aclfinaltrue}
+
+%% ----- Set up hooks to repeat content on every page of the output doc, 
+%% necessary for the line numbers in the submitted version.  --MM
+%%
+%% Copied from CVPR 2015's cvpr_eso.sty, which appears to be largely copied from everyshi.sty.
+%%
+%% Original cvpr_eso.sty available at: http://www.pamitc.org/cvpr15/author_guidelines.php
+%% Original evershi.sty available at: https://www.ctan.org/pkg/everyshi
+%%
+%% Copyright (C) 2001 Martin Schr\"oder:
+%% 
+%%                         Martin Schr"oder
+%%                         Cr"usemannallee 3
+%%                         D-28213 Bremen
+%%                         Martin.Schroeder@ACM.org
+%% 
+%% This program may be redistributed and/or modified under the terms
+%% of the LaTeX Project Public License, either version 1.0 of this
+%% license, or (at your option) any later version.
+%% The latest version of this license is in
+%%    CTAN:macros/latex/base/lppl.txt.
+%% 
+%% Happy users are requested to send [Martin] a postcard. :-)
+%%
+\newcommand{\@EveryShipoutACL@Hook}{}
+\newcommand{\@EveryShipoutACL@AtNextHook}{}
+\newcommand*{\EveryShipoutACL}[1]
+   {\g@addto@macro\@EveryShipoutACL@Hook{#1}}
+\newcommand*{\AtNextShipoutACL@}[1]
+   {\g@addto@macro\@EveryShipoutACL@AtNextHook{#1}}
+\newcommand{\@EveryShipoutACL@Shipout}{%
+   \afterassignment\@EveryShipoutACL@Test
+   \global\setbox\@cclv= %
+   }
+\newcommand{\@EveryShipoutACL@Test}{%
+   \ifvoid\@cclv\relax
+      \aftergroup\@EveryShipoutACL@Output
+   \else
+      \@EveryShipoutACL@Output
+   \fi%
+   }
+\newcommand{\@EveryShipoutACL@Output}{%
+   \@EveryShipoutACL@Hook%
+   \@EveryShipoutACL@AtNextHook%
+      \gdef\@EveryShipoutACL@AtNextHook{}%
+   \@EveryShipoutACL@Org@Shipout\box\@cclv%
+   }
+\newcommand{\@EveryShipoutACL@Org@Shipout}{}
+\newcommand*{\@EveryShipoutACL@Init}{%
+   \message{ABD: EveryShipout initializing macros}%
+   \let\@EveryShipoutACL@Org@Shipout\shipout
+   \let\shipout\@EveryShipoutACL@Shipout
+   }
+\AtBeginDocument{\@EveryShipoutACL@Init}
+
+%% ----- Set up for placing additional items into the submitted version --MM
+%%
+%% Based on eso-pic.sty
+%%
+%% Original available at: https://www.ctan.org/tex-archive/macros/latex/contrib/eso-pic
+%% Copyright (C) 1998-2002 by Rolf Niepraschk <niepraschk@ptb.de>
+%% 
+%% Which may be distributed and/or modified under the conditions of
+%% the LaTeX Project Public License, either version 1.2 of this license
+%% or (at your option) any later version.  The latest version of this
+%% license is in:
+%% 
+%%    http://www.latex-project.org/lppl.txt
+%% 
+%% and version 1.2 or later is part of all distributions of LaTeX version
+%% 1999/12/01 or later.
+%%
+%% In contrast to the original, we do not include the definitions for/using:
+%% gridpicture, div[2], isMEMOIR[1], gridSetup[6][], subgridstyle{dotted}, labelfactor{}, gap{}, gridunitname{}, gridunit{}, gridlines{\thinlines}, subgridlines{\thinlines}, the {keyval} package, evenside margin, nor any definitions with 'color'.
+%%
+%% These are beyond  what is needed for the NAACL style.
+%%
+\newcommand\LenToUnit[1]{#1\@gobble}
+\newcommand\AtPageUpperLeft[1]{%
+  \begingroup
+    \@tempdima=0pt\relax\@tempdimb=\ESO@yoffsetI\relax
+    \put(\LenToUnit{\@tempdima},\LenToUnit{\@tempdimb}){#1}%
+  \endgroup
+}
+\newcommand\AtPageLowerLeft[1]{\AtPageUpperLeft{%
+  \put(0,\LenToUnit{-\paperheight}){#1}}}
+\newcommand\AtPageCenter[1]{\AtPageUpperLeft{%
+  \put(\LenToUnit{.5\paperwidth},\LenToUnit{-.5\paperheight}){#1}}}
+\newcommand\AtPageLowerCenter[1]{\AtPageUpperLeft{%
+  \put(\LenToUnit{.5\paperwidth},\LenToUnit{-\paperheight}){#1}}}%
+\newcommand\AtPageLowishCenter[1]{\AtPageUpperLeft{%
+  \put(\LenToUnit{.5\paperwidth},\LenToUnit{-.96\paperheight}){#1}}}
+\newcommand\AtTextUpperLeft[1]{%
+  \begingroup
+    \setlength\@tempdima{1in}%
+    \advance\@tempdima\oddsidemargin%
+    \@tempdimb=\ESO@yoffsetI\relax\advance\@tempdimb-1in\relax%
+    \advance\@tempdimb-\topmargin%
+    \advance\@tempdimb-\headheight\advance\@tempdimb-\headsep%
+    \put(\LenToUnit{\@tempdima},\LenToUnit{\@tempdimb}){#1}%
+  \endgroup
+}
+\newcommand\AtTextLowerLeft[1]{\AtTextUpperLeft{%
+  \put(0,\LenToUnit{-\textheight}){#1}}}
+\newcommand\AtTextCenter[1]{\AtTextUpperLeft{%
+  \put(\LenToUnit{.5\textwidth},\LenToUnit{-.5\textheight}){#1}}}
+\newcommand{\ESO@HookI}{} \newcommand{\ESO@HookII}{}
+\newcommand{\ESO@HookIII}{}
+\newcommand{\AddToShipoutPicture}{%
+  \@ifstar{\g@addto@macro\ESO@HookII}{\g@addto@macro\ESO@HookI}}
+\newcommand{\ClearShipoutPicture}{\global\let\ESO@HookI\@empty}
+\newcommand{\@ShipoutPicture}{%
+  \bgroup
+    \@tempswafalse%
+    \ifx\ESO@HookI\@empty\else\@tempswatrue\fi%
+    \ifx\ESO@HookII\@empty\else\@tempswatrue\fi%
+    \ifx\ESO@HookIII\@empty\else\@tempswatrue\fi%
+    \if@tempswa%
+      \@tempdima=1in\@tempdimb=-\@tempdima%
+      \advance\@tempdimb\ESO@yoffsetI%
+      \unitlength=1pt%
+      \global\setbox\@cclv\vbox{%
+        \vbox{\let\protect\relax
+          \pictur@(0,0)(\strip@pt\@tempdima,\strip@pt\@tempdimb)%
+            \ESO@HookIII\ESO@HookI\ESO@HookII%
+            \global\let\ESO@HookII\@empty%
+          \endpicture}%
+          \nointerlineskip%
+        \box\@cclv}%
+    \fi
+  \egroup
+}
+\EveryShipoutACL{\@ShipoutPicture}
+\newif\ifESO@dvips\ESO@dvipsfalse 
+\newif\ifESO@grid\ESO@gridfalse
+\newif\ifESO@texcoord\ESO@texcoordfalse
+\newcommand*\ESO@griddelta{}\newcommand*\ESO@griddeltaY{}
+\newcommand*\ESO@gridDelta{}\newcommand*\ESO@gridDeltaY{}
+\newcommand*\ESO@yoffsetI{}\newcommand*\ESO@yoffsetII{}
+\ifESO@texcoord
+  \def\ESO@yoffsetI{0pt}\def\ESO@yoffsetII{-\paperheight}
+  \edef\ESO@griddeltaY{-\ESO@griddelta}\edef\ESO@gridDeltaY{-\ESO@gridDelta}
+\else
+  \def\ESO@yoffsetI{\paperheight}\def\ESO@yoffsetII{0pt}
+  \edef\ESO@griddeltaY{\ESO@griddelta}\edef\ESO@gridDeltaY{\ESO@gridDelta}
+\fi
+
+
+%% ----- Submitted version markup: Page numbers, ruler, and confidentiality.  Using ideas/code from cvpr.sty 2015. --MM
+
+\font\naaclhv  = phvb at 8pt 
+
+%% Define vruler %%
+
+%\makeatletter
+\newbox\aclrulerbox
+\newcount\aclrulercount
+\newdimen\aclruleroffset
+\newdimen\cv@lineheight
+\newdimen\cv@boxheight
+\newbox\cv@tmpbox
+\newcount\cv@refno
+\newcount\cv@tot
+% NUMBER with left flushed zeros  \fillzeros[<WIDTH>]<NUMBER>
+\newcount\cv@tmpc@ \newcount\cv@tmpc
+\def\fillzeros[#1]#2{\cv@tmpc@=#2\relax\ifnum\cv@tmpc@<0\cv@tmpc@=-\cv@tmpc@\fi
+\cv@tmpc=1 %
+\loop\ifnum\cv@tmpc@<10 \else \divide\cv@tmpc@ by 10 \advance\cv@tmpc by 1 \fi
+   \ifnum\cv@tmpc@=10\relax\cv@tmpc@=11\relax\fi \ifnum\cv@tmpc@>10 \repeat
+\ifnum#2<0\advance\cv@tmpc1\relax-\fi
+\loop\ifnum\cv@tmpc<#1\relax0\advance\cv@tmpc1\relax\fi \ifnum\cv@tmpc<#1 \repeat
+\cv@tmpc@=#2\relax\ifnum\cv@tmpc@<0\cv@tmpc@=-\cv@tmpc@\fi \relax\the\cv@tmpc@}%
+% \makevruler[<SCALE>][<INITIAL_COUNT>][<STEP>][<DIGITS>][<HEIGHT>]
+\def\makevruler[#1][#2][#3][#4][#5]{\begingroup\offinterlineskip
+\textheight=#5\vbadness=10000\vfuzz=120ex\overfullrule=0pt%
+\global\setbox\aclrulerbox=\vbox to \textheight{%
+{\parskip=0pt\hfuzz=150em\cv@boxheight=\textheight
+\cv@lineheight=#1\global\aclrulercount=#2%
+\cv@tot\cv@boxheight\divide\cv@tot\cv@lineheight\advance\cv@tot2%
+\cv@refno1\vskip-\cv@lineheight\vskip1ex%
+\loop\setbox\cv@tmpbox=\hbox to0cm{{\naaclhv\hfil\fillzeros[#4]\aclrulercount}}%
+\ht\cv@tmpbox\cv@lineheight\dp\cv@tmpbox0pt\box\cv@tmpbox\break
+\advance\cv@refno1\global\advance\aclrulercount#3\relax
+\ifnum\cv@refno<\cv@tot\repeat}}\endgroup}%
+%\makeatother
+
+
+\def\aclpaperid{***}
+\def\confidential{ACL 2018 Submission~\aclpaperid.  Confidential Review Copy.  DO NOT DISTRIBUTE.}
+
+%% Page numbering, Vruler and Confidentiality %%
+% \makevruler[<SCALE>][<INITIAL_COUNT>][<STEP>][<DIGITS>][<HEIGHT>]
+
+% SC/KG/WL - changed line numbering to gainsboro
+\definecolor{gainsboro}{rgb}{0.8, 0.8, 0.8}
+%\def\aclruler#1{\makevruler[14.17pt][#1][1][3][\textheight]\usebox{\aclrulerbox}}  %% old line
+\def\aclruler#1{\textcolor{gainsboro}{\makevruler[14.17pt][#1][1][3][\textheight]\usebox{\aclrulerbox}}}
+
+\def\leftoffset{-2.1cm} %original: -45pt
+\def\rightoffset{17.5cm} %original: 500pt
+\ifaclfinal\else\pagenumbering{arabic}
+\AddToShipoutPicture{%
+\ifaclfinal\else
+\AtPageLowishCenter{\thepage}
+\aclruleroffset=\textheight
+\advance\aclruleroffset4pt
+  \AtTextUpperLeft{%
+    \put(\LenToUnit{\leftoffset},\LenToUnit{-\aclruleroffset}){%left ruler
+      \aclruler{\aclrulercount}}
+    \put(\LenToUnit{\rightoffset},\LenToUnit{-\aclruleroffset}){%right ruler
+      \aclruler{\aclrulercount}}
+  }
+  \AtTextUpperLeft{%confidential
+    \put(0,\LenToUnit{1cm}){\parbox{\textwidth}{\centering\naaclhv\confidential}}
+  }
+\fi
+}
+
+%%%% ----- End settings for placing additional items into the submitted version --MM ----- %%%%
+
+%%%% ----- Begin settings for both submitted and camera-ready version ----- %%%%
+
+%% Title and Authors %%
+
+\newcommand\outauthor{
+    \begin{tabular}[t]{c}
+	\ifaclfinal 
+	     \bf\@author
+	\else 
+		% Avoiding common accidental de-anonymization issue. --MM
+     		\bf Anonymous ACL submission
+	\fi
+    \end{tabular}}
+
+% Changing the expanded titlebox for submissions to 2.5 in (rather than 6.5cm)
+% and moving it to the style sheet, rather than within the example tex file. --MM
+\ifaclfinal 
+\else 
+	\addtolength\titlebox{.25in}
+\fi
+% Mostly taken from deproc.
+\def\maketitle{\par
+ \begingroup
+   \def\thefootnote{\fnsymbol{footnote}}
+   \def\@makefnmark{\hbox to 0pt{$^{\@thefnmark}$\hss}}
+   \twocolumn[\@maketitle] \@thanks
+ \endgroup
+ \setcounter{footnote}{0}
+ \let\maketitle\relax \let\@maketitle\relax
+ \gdef\@thanks{}\gdef\@author{}\gdef\@title{}\let\thanks\relax}
+\def\@maketitle{\vbox to \titlebox{\hsize\textwidth
+ \linewidth\hsize \vskip 0.125in minus 0.125in \centering
+ {\Large\bf \@title \par} \vskip 0.2in plus 1fil minus 0.1in
+ {\def\and{\unskip\enspace{\rm and}\enspace}%
+  \def\And{\end{tabular}\hss \egroup \hskip 1in plus 2fil 
+           \hbox to 0pt\bgroup\hss \begin{tabular}[t]{c}\bf}%
+  \def\AND{\end{tabular}\hss\egroup \hfil\hfil\egroup
+          \vskip 0.25in plus 1fil minus 0.125in
+           \hbox to \linewidth\bgroup\large \hfil\hfil
+             \hbox to 0pt\bgroup\hss \begin{tabular}[t]{c}\bf}
+  \hbox to \linewidth\bgroup\large \hfil\hfil
+    \hbox to 0pt\bgroup\hss 
+	\outauthor
+   \hss\egroup
+    \hfil\hfil\egroup}
+  \vskip 0.3in plus 2fil minus 0.1in
+}}
+
+% margins for abstract
+\renewenvironment{abstract}%
+		 {\centerline{\large\bf Abstract}%
+		  \begin{list}{}%
+		     {\setlength{\rightmargin}{0.6cm}%
+		      \setlength{\leftmargin}{0.6cm}}%
+		   \item[]\ignorespaces}%
+		 {\unskip\end{list}}
+		     
+%\renewenvironment{abstract}{\centerline{\large\bf  
+% Abstract}\vspace{0.5ex}\begin{quote}}{\par\end{quote}\vskip 1ex}
+
+\RequirePackage{natbib}
+% for citation commands in the .tex, authors can use:
+% \citep, \citet, and \citeyearpar for compatibility with natbib, or
+% \cite, \newcite, and \shortcite for compatibility with older ACL .sty files
+\renewcommand\cite{\citep}	% to get "(Author Year)" with natbib    
+\newcommand\shortcite{\citeyearpar}% to get "(Year)" with natbib    
+\newcommand\newcite{\citet}	% to get "Author (Year)" with natbib    
+
+% bibliography
+
+\def\@up#1{\raise.2ex\hbox{#1}}
+
+% Don't put a label in the bibliography at all.  Just use the unlabeled format
+% instead.
+\def\thebibliography#1{\vskip\parskip%
+\vskip\baselineskip%
+\def\baselinestretch{1}%
+\ifx\@currsize\normalsize\@normalsize\else\@currsize\fi%
+\vskip-\parskip%
+\vskip-\baselineskip%
+\section*{References\@mkboth
+ {References}{References}}\list
+ {}{\setlength{\labelwidth}{0pt}\setlength{\leftmargin}{\parindent}
+ \setlength{\itemindent}{-\parindent}}
+ \def\newblock{\hskip .11em plus .33em minus -.07em}
+ \sloppy\clubpenalty4000\widowpenalty4000
+ \sfcode`\.=1000\relax}
+\let\endthebibliography=\endlist
+
+
+% Allow for a bibliography of sources of attested examples
+\def\thesourcebibliography#1{\vskip\parskip%
+\vskip\baselineskip%
+\def\baselinestretch{1}%
+\ifx\@currsize\normalsize\@normalsize\else\@currsize\fi%
+\vskip-\parskip%
+\vskip-\baselineskip%
+\section*{Sources of Attested Examples\@mkboth
+ {Sources of Attested Examples}{Sources of Attested Examples}}\list
+ {}{\setlength{\labelwidth}{0pt}\setlength{\leftmargin}{\parindent}
+ \setlength{\itemindent}{-\parindent}}
+ \def\newblock{\hskip .11em plus .33em minus -.07em}
+ \sloppy\clubpenalty4000\widowpenalty4000
+ \sfcode`\.=1000\relax}
+\let\endthesourcebibliography=\endlist
+
+% sections with less space
+\def\section{\@startsection {section}{1}{\z@}{-2.0ex plus
+    -0.5ex minus -.2ex}{1.5ex plus 0.3ex minus .2ex}{\large\bf\raggedright}}
+\def\subsection{\@startsection{subsection}{2}{\z@}{-1.8ex plus
+    -0.5ex minus -.2ex}{0.8ex plus .2ex}{\normalsize\bf\raggedright}}
+%% changed by KO to - values to get teh initial parindent right
+\def\subsubsection{\@startsection{subsubsection}{3}{\z@}{-1.5ex plus
+   -0.5ex minus -.2ex}{0.5ex plus .2ex}{\normalsize\bf\raggedright}}
+\def\paragraph{\@startsection{paragraph}{4}{\z@}{1.5ex plus
+   0.5ex minus .2ex}{-1em}{\normalsize\bf}}
+\def\subparagraph{\@startsection{subparagraph}{5}{\parindent}{1.5ex plus
+   0.5ex minus .2ex}{-1em}{\normalsize\bf}}
+
+% Footnotes
+\footnotesep 6.65pt %
+\skip\footins 9pt plus 4pt minus 2pt
+\def\footnoterule{\kern-3pt \hrule width 5pc \kern 2.6pt }
+\setcounter{footnote}{0}
+
+% Lists and paragraphs
+\parindent 1em
+\topsep 4pt plus 1pt minus 2pt
+\partopsep 1pt plus 0.5pt minus 0.5pt
+\itemsep 2pt plus 1pt minus 0.5pt
+\parsep 2pt plus 1pt minus 0.5pt
+
+\leftmargin 2em \leftmargini\leftmargin \leftmarginii 2em
+\leftmarginiii 1.5em \leftmarginiv 1.0em \leftmarginv .5em \leftmarginvi .5em
+\labelwidth\leftmargini\advance\labelwidth-\labelsep \labelsep 5pt
+
+\def\@listi{\leftmargin\leftmargini}
+\def\@listii{\leftmargin\leftmarginii
+   \labelwidth\leftmarginii\advance\labelwidth-\labelsep
+   \topsep 2pt plus 1pt minus 0.5pt
+   \parsep 1pt plus 0.5pt minus 0.5pt
+   \itemsep \parsep}
+\def\@listiii{\leftmargin\leftmarginiii
+    \labelwidth\leftmarginiii\advance\labelwidth-\labelsep
+    \topsep 1pt plus 0.5pt minus 0.5pt 
+    \parsep \z@ \partopsep 0.5pt plus 0pt minus 0.5pt
+    \itemsep \topsep}
+\def\@listiv{\leftmargin\leftmarginiv
+     \labelwidth\leftmarginiv\advance\labelwidth-\labelsep}
+\def\@listv{\leftmargin\leftmarginv
+     \labelwidth\leftmarginv\advance\labelwidth-\labelsep}
+\def\@listvi{\leftmargin\leftmarginvi
+     \labelwidth\leftmarginvi\advance\labelwidth-\labelsep}
+
+\abovedisplayskip 7pt plus2pt minus5pt%
+\belowdisplayskip \abovedisplayskip
+\abovedisplayshortskip  0pt plus3pt%   
+\belowdisplayshortskip  4pt plus3pt minus3pt%
+
+% Less leading in most fonts (due to the narrow columns)
+% The choices were between 1-pt and 1.5-pt leading
+\def\@normalsize{\@setsize\normalsize{11pt}\xpt\@xpt}
+\def\small{\@setsize\small{10pt}\ixpt\@ixpt}
+\def\footnotesize{\@setsize\footnotesize{10pt}\ixpt\@ixpt}
+\def\scriptsize{\@setsize\scriptsize{8pt}\viipt\@viipt}
+\def\tiny{\@setsize\tiny{7pt}\vipt\@vipt}
+\def\large{\@setsize\large{14pt}\xiipt\@xiipt}
+\def\Large{\@setsize\Large{16pt}\xivpt\@xivpt}
+\def\LARGE{\@setsize\LARGE{20pt}\xviipt\@xviipt}
+\def\huge{\@setsize\huge{23pt}\xxpt\@xxpt}
+\def\Huge{\@setsize\Huge{28pt}\xxvpt\@xxvpt}
