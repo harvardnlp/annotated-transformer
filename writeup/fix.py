@@ -13,7 +13,7 @@ m = {"https://arxiv.org/abs/1409.0473": "DBLP:journals/corr/BahdanauCB14",
 }
 
 for l in sys.stdin:
-    s = l.strip().split()
+    s = l.rstrip().split(" ")
     s2 = []
     for w in s:
         if w.startswith("\\href"):
