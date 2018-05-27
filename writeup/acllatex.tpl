@@ -1,0 +1,1 @@
+../acllatex.tpl
