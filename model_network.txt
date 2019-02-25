@@ -1,0 +1,161 @@
+EncoderDecoder(
+  (encoder): Encoder(
+    (lyayers): ModuleList(
+      (0): EncoderLayer(
+        (self_attn): MultiHeadedAttention(
+          (linears): ModuleList(
+            (0): Linear(in_features=512, out_features=512, bias=True)
+            (1): Linear(in_features=512, out_features=512, bias=True)
+            (2): Linear(in_features=512, out_features=512, bias=True)
+            (3): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (dropout): Dropout(p=0.1)
+        )
+        (feed_forward): PositionwiseFeedForward(
+          (w_1): Linear(in_features=512, out_features=2048, bias=True)
+          (w_2): Linear(in_features=2048, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1)
+        )
+        (sublayer): ModuleList(
+          (0): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+          (1): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+        )
+      )
+      (1): EncoderLayer(
+        (self_attn): MultiHeadedAttention(
+          (linears): ModuleList(
+            (0): Linear(in_features=512, out_features=512, bias=True)
+            (1): Linear(in_features=512, out_features=512, bias=True)
+            (2): Linear(in_features=512, out_features=512, bias=True)
+            (3): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (dropout): Dropout(p=0.1)
+        )
+        (feed_forward): PositionwiseFeedForward(
+          (w_1): Linear(in_features=512, out_features=2048, bias=True)
+          (w_2): Linear(in_features=2048, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1)
+        )
+        (sublayer): ModuleList(
+          (0): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+          (1): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+        )
+      )
+    )
+    (norm): LayerNorm()
+  )
+  (decoder): Decoder(
+    (layers): ModuleList(
+      (0): DecoderLayer(
+        (self_attn): MultiHeadedAttention(
+          (linears): ModuleList(
+            (0): Linear(in_features=512, out_features=512, bias=True)
+            (1): Linear(in_features=512, out_features=512, bias=True)
+            (2): Linear(in_features=512, out_features=512, bias=True)
+            (3): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (dropout): Dropout(p=0.1)
+        )
+        (src_attn): MultiHeadedAttention(
+          (linears): ModuleList(
+            (0): Linear(in_features=512, out_features=512, bias=True)
+            (1): Linear(in_features=512, out_features=512, bias=True)
+            (2): Linear(in_features=512, out_features=512, bias=True)
+            (3): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (dropout): Dropout(p=0.1)
+        )
+        (feed_forward): PositionwiseFeedForward(
+          (w_1): Linear(in_features=512, out_features=2048, bias=True)
+          (w_2): Linear(in_features=2048, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1)
+        )
+        (sublayer): ModuleList(
+          (0): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+          (1): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+          (2): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+        )
+      )
+      (1): DecoderLayer(
+        (self_attn): MultiHeadedAttention(
+          (linears): ModuleList(
+            (0): Linear(in_features=512, out_features=512, bias=True)
+            (1): Linear(in_features=512, out_features=512, bias=True)
+            (2): Linear(in_features=512, out_features=512, bias=True)
+            (3): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (dropout): Dropout(p=0.1)
+        )
+        (src_attn): MultiHeadedAttention(
+          (linears): ModuleList(
+            (0): Linear(in_features=512, out_features=512, bias=True)
+            (1): Linear(in_features=512, out_features=512, bias=True)
+            (2): Linear(in_features=512, out_features=512, bias=True)
+            (3): Linear(in_features=512, out_features=512, bias=True)
+          )
+          (dropout): Dropout(p=0.1)
+        )
+        (feed_forward): PositionwiseFeedForward(
+          (w_1): Linear(in_features=512, out_features=2048, bias=True)
+          (w_2): Linear(in_features=2048, out_features=512, bias=True)
+          (dropout): Dropout(p=0.1)
+        )
+        (sublayer): ModuleList(
+          (0): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+          (1): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+          (2): SublayerConnection(
+            (norm): LayerNorm()
+            (dropout): Dropout(p=0.1)
+          )
+        )
+      )
+    )
+    (norm): LayerNorm()
+  )
+  (src_embed): Sequential(
+    (0): Embeddings(
+      (lut): Embedding(10, 512)
+    )
+    (1): PositionalEncoding(
+      (dropout): Dropout(p=0.1)
+    )
+  )
+  (tgt_embed): Sequential(
+    (0): Embeddings(
+      (lut): Embedding(10, 512)
+    )
+    (1): PositionalEncoding(
+      (dropout): Dropout(p=0.1)
+    )
+  )
+  (generator): Generator(
+    (proj): Linear(in_features=512, out_features=10, bias=True)
+  )
+)
