@@ -41,7 +41,6 @@ Note this is merely a starting point for researchers and interested developers. 
 ```
 
 ```python
-import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -251,8 +250,8 @@ We also modify the self-attention sub-layer in the decoder stack to prevent posi
 def subsequent_mask(size):
     "Mask out subsequent positions."
     attn_shape = (1, size, size)
-    subsequent_mask = np.triu(np.ones(attn_shape), k=1).astype('uint8')
-    return torch.from_numpy(subsequent_mask) == 0
+    subsequent_mask = torch.triu(torch.ones(attn_shape), diagonal=1).type(torch.uint8)
+    return subsequent_mask == 0
 ```
 
 > Below the attention mask shows the position each tgt word (row) is allowed to look at (column). Words are blocked for attending to future words during training.
@@ -437,10 +436,9 @@ class PositionalEncoding(nn.Module):
 ```python
 plt.figure(figsize=(15, 5))
 pe = PositionalEncoding(20, 0)
-y = pe.forward(Variable(torch.zeros(1, 100, 20)))
-plt.plot(np.arange(100), y[0, :, 4:8].data.numpy())
+y = pe.forward(torch.zeros(1, 100, 20))
+plt.plot(torch.arange(100), y[0, :, 4:8])
 plt.legend(["dim %d"%p for p in [4,5,6,7]])
-None
 ```
 
 We also experimented with using learned positional embeddings [(cite)](https://arxiv.org/pdf/1705.03122.pdf) instead, and found that the two versions produced nearly identical results.  We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.    
@@ -557,6 +555,9 @@ TARGET = 1
 ```
 
 ```python
+SOURCE = 0
+TARGET = 1
+
 global max_src_in_batch, max_tgt_in_batch
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -571,9 +572,10 @@ def batch_size_fn(new, count, sofar):
     return max(src_elements, tgt_elements)
 ```
 
+<!-- #region jp-MarkdownHeadingCollapsed=true tags=[] -->
 ## Hardware and Schedule                                                                                                                                                                                                   
 We trained our models on one machine with 8 NVIDIA P100 GPUs.  For our base models using the hyperparameters described throughout the paper, each training step took about 0.4 seconds.  We trained the base models for a total of 100,000 steps or 12 hours. For our big models, step time was 1.0 seconds.  The big models were trained for 300,000 steps (3.5 days).
-
+<!-- #endregion -->
 
 ## Optimizer
 
@@ -589,7 +591,6 @@ This corresponds to increasing the learning rate linearly for the first $warmup\
 > Note: This part is very important. Need to train with this setup of the model. 
 
 ```python
-
 class NoamOpt:
     "Optim wrapper that implements rate."
     def __init__(self, model_size, factor, warmup, optimizer):
@@ -598,21 +599,16 @@ class NoamOpt:
         self.warmup = warmup
         self.factor = factor
         self.model_size = model_size
-        self._rate = 0
         
     def step(self):
         "Update parameters and rate"
         self._step += 1
-        rate = self.rate()
         for p in self.optimizer.param_groups:
-            p['lr'] = rate
-        self._rate = rate
+            p['lr'] = self.rate(self._step)
         self.optimizer.step()
         
-    def rate(self, step = None):
+    def rate(self, step):
         "Implement `lrate` above"
-        if step is None:
-            step = self._step
         return self.factor * \
             (self.model_size ** (-0.5) *
             min(step ** (-0.5), step * self.warmup ** (-1.5)))
@@ -625,13 +621,15 @@ def get_std_opt(model):
 
 > Example of the curves of this model for different model sizes and for optimization hyperparameters. 
 
-```python
+```python tags=[]
 # Three settings of the lrate hyperparameters.
 opts = [NoamOpt(512, 1, 4000, None), 
         NoamOpt(512, 1, 8000, None),
         NoamOpt(256, 1, 4000, None)]
-plt.plot(np.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
+plt.plot(torch.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
 plt.legend(["512:4000", "512:8000", "256:4000"])
+plt.gca().set_xlabel("Step")
+plt.gca().set_ylabel("Learning Rate")
 None
 ```
 
@@ -666,7 +664,7 @@ class LabelSmoothing(nn.Module):
         if mask.dim() > 0:
             true_dist.index_fill_(0, mask.squeeze(), 0.0)
         self.true_dist = true_dist
-        return self.criterion(x, Variable(true_dist, requires_grad=False))
+        return self.criterion(x, true_dist.clone().detach())
 ```
 
 > Here we can see an example of how the mass is distributed to the words based on confidence. 
@@ -676,9 +674,10 @@ class LabelSmoothing(nn.Module):
 crit = LabelSmoothing(5, 0, 0.4)
 predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
                              [0, 0.2, 0.7, 0.1, 0], 
+                             [0, 0.2, 0.7, 0.1, 0], 
+                             [0, 0.2, 0.7, 0.1, 0], 
                              [0, 0.2, 0.7, 0.1, 0]])
-v = crit(predict.log(), 
-         torch.LongTensor([2, 1, 0]))
+v = crit(x=predict.log(), target=torch.LongTensor([2, 1, 0, 3, 3]))
 
 # Show the target distributions expected by the system.
 plt.imshow(crit.true_dist)
@@ -692,10 +691,8 @@ def loss(x):
     d = x + 3 * 1
     predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d],
                                  ])
-    #print(predict)
-    return crit(predict.log(),
-                 torch.LongTensor([1])).data
-plt.plot(np.arange(1, 100), [loss(x) for x in range(1, 100)])
+    return crit(predict.log(), torch.LongTensor([1])).data
+plt.plot(torch.arange(1, 100), [loss(x) for x in range(1, 100)])
 None
 ```
 
@@ -710,7 +707,7 @@ None
 def data_gen(V, batch, nbatches):
     "Generate random data for a src-tgt copy task."
     for i in range(nbatches):
-        data = torch.from_numpy(np.random.randint(1, V, size=(batch, 10)))
+        data = torch.randint(1, V, size=(batch, 10))
         data[:, 0] = 1
         src = Variable(data, requires_grad=False)
         tgt = Variable(data, requires_grad=False)
@@ -828,8 +825,8 @@ vocab_tgt = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_
                                      min_freq=2,
                                      specials=['<s>','</s>','<blank>','<unk>'])
 
-vocab_src.set_default_index(vocab_de["<unk>"])
-vocab_tgt.set_default_index(vocab_en["<unk>"])
+vocab_src.set_default_index(vocab_src["<unk>"])
+vocab_tgt.set_default_index(vocab_tgt["<unk>"])
 ```
 
 > Batching matters a ton for speed. We want to have very evenly divided batches, with absolutely minimal padding. To do this we have to hack a bit around the default torchtext batching. This code patches their default batching to make sure we search over enough sentences to find tight batches. 
