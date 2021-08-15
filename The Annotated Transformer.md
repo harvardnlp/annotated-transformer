@@ -45,7 +45,6 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math, copy, time
-from torch.autograd import Variable
 import matplotlib.pyplot as plt
 import seaborn
 seaborn.set_context(context="talk")
@@ -426,8 +425,7 @@ class PositionalEncoding(nn.Module):
         self.register_buffer('pe', pe)
         
     def forward(self, x):
-        x = x + Variable(self.pe[:, :x.size(1)], 
-                         requires_grad=False)
+        x = x + self.pe[:,:x.size(1)].requires_grad_(False)
         return self.dropout(x)
 ```
 
@@ -505,8 +503,7 @@ class Batch:
     def make_std_mask(tgt, pad):
         "Create a mask to hide padding and future words."
         tgt_mask = (tgt != pad).unsqueeze(-2)
-        tgt_mask = tgt_mask & Variable(
-            subsequent_mask(tgt.size(-1)).type_as(tgt_mask.data))
+        tgt_mask = tgt_mask & subsequent_mask(tgt.size(-1)).type_as(tgt_mask.data)
         return tgt_mask
 ```
 
@@ -709,8 +706,8 @@ def data_gen(V, batch, nbatches):
     for i in range(nbatches):
         data = torch.randint(1, V, size=(batch, 10))
         data[:, 0] = 1
-        src = Variable(data, requires_grad=False)
-        tgt = Variable(data, requires_grad=False)
+        src = data.requires_grad_(False)
+        tgt = data.requires_grad_(False)
         yield Batch(src, tgt, 0)
 ```
 
@@ -907,8 +904,7 @@ class MultiGPULossCompute:
         chunk_size = self.chunk_size
         for i in range(0, out_scatter[0].size(1), chunk_size):
             # Predict distributions
-            out_column = [[Variable(o[:, i:i+chunk_size].data, 
-                                    requires_grad=self.opt is not None)] 
+            out_column = [[o[:, i:i+chunk_size].data.requires_grad_(self.opt is not None) 
                            for o in out_scatter]
             gen = nn.parallel.parallel_apply(generator, out_column)
 
@@ -932,7 +928,7 @@ class MultiGPULossCompute:
 
         # Backprop all loss through transformer.            
         if self.opt is not None:
-            out_grad = [Variable(torch.cat(og, dim=1)) for og in out_grad]
+            out_grad = [torch.cat(og, dim=1) for og in out_grad]
             o1 = out
             o2 = nn.parallel.gather(out_grad, 
                                     target_device=self.devices[0])
@@ -1107,7 +1103,6 @@ model, SRC, TGT = torch.load("en-de-model.pt")
 model.eval()
 sent = "▁The ▁log ▁file ▁can ▁be ▁sent ▁secret ly ▁with ▁email ▁or ▁FTP ▁to ▁a ▁specified ▁receiver".split()
 src = torch.LongTensor([[SRC.stoi[w] for w in sent]])
-src = Variable(src)
 src_mask = (src != SRC.stoi["<blank>"]).unsqueeze(-2)
 out = greedy_decode(model, src, src_mask, 
                     max_len=60, start_symbol=TGT.stoi["<s>"])
