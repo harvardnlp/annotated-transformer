@@ -706,8 +706,8 @@ def data_gen(V, batch, nbatches):
     for i in range(nbatches):
         data = torch.randint(1, V, size=(batch, 10))
         data[:, 0] = 1
-        src = data.requires_grad_(False)
-        tgt = data.requires_grad_(False)
+        src = data.requires_grad_(False).clone().detach()
+        tgt = data.requires_grad_(False).clone().detach()
         yield Batch(src, tgt, 0)
 ```
 
