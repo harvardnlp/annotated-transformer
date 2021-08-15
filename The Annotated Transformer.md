@@ -833,20 +833,21 @@ vocab_tgt.set_default_index(vocab_tgt["<unk>"])
 
 ```python
 from torch.utils.data import DataLoader
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+from torch.nn.functional import pad
 
-def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab):
+def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab,max_padding=128,pad_id=0):
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
          processed_src = torch.tensor(src_vocab(src_pipeline(_src)), dtype=torch.int64)
          processed_tgt = torch.tensor(tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64)
-         src_list.append(processed_src)
-         tgt_list.append(processed_tgt)
-    src = torch.cat(src_list)
-    tgt = torch.cat(tgt_list)
+         src_list.append(pad(processed_src,(0,max_padding - len(processed_src)),value=pad_id))
+         tgt_list.append(pad(processed_tgt,(0,max_padding - len(processed_tgt)),value=pad_id))
+    
+    src = torch.stack(src_list)
+    tgt = torch.stack(tgt_list)
     return src.to(device), tgt.to(device)
 
-collate_fn = lambda batch: collate_batch(batch, tokenize_src, tokenize_tgt, vocab_src, vocab_tgt)
+collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt)
 ```
 
 ```python
