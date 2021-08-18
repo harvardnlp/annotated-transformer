@@ -23,7 +23,7 @@ jobs:
         # https://github.com/actions/virtual-environments/issues/1003#issuecomment-638856167
         run: |
           $CONDA/bin/conda init bash
-          $CONDa/bin/conda info | grep -i 'base environment'
+          $CONDA/bin/conda info | grep -i 'base environment'
           source $CONDA/etc/profile.d/conda.sh
           eval "$(${CONDA}/bin/conda shell.bash hook)"
           $CONDA/bin/conda activate base
