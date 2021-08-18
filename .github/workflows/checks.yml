@@ -16,20 +16,10 @@ jobs:
         run: |
           $CONDA/bin/conda install pytorch cpuonly -c pytorch
           $CONDA/bin/conda install -c pytorch torchtext spacy matplotlib seaborn altair
-          $CONDA/bin/conda install -c anaconda flake8
           $CONDA/bin/conda install -c conda-forge black
       - name: style
         # https://github.community/t/how-can-i-access-the-current-repo-context-and-files-from-a-docker-container-action/17711
         run: |
-          flake8 --ignore "N801, E203, E266, E501, W503, F812, E741, N803, N802, N806" /github/workspace
-
-
-
-        
-
-
-      
-
-
-
-
+          $CONDA/bin/conda activate base
+          $CONDA/bin/conda install -c anaconda flake8
+          python -m flake8 --ignore "N801, E203, E266, E501, W503, F812, E741, N803, N802, N806" /github/workspace
