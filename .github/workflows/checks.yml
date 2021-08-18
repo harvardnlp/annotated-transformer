@@ -7,6 +7,9 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
+      - name: Setup upterm session
+        # https://github.com/marketplace/actions/debugging-with-ssh
+        uses: lhotari/action-upterm@v1
       - name: Setup Python 3.9
         # https://autobencoder.com/2020-08-24-conda-actions/
         uses: actions/setup-python@v2
@@ -23,6 +26,8 @@ jobs:
         # https://github.com/actions/virtual-environments/issues/1003#issuecomment-638856167
         run: |
           $CONDA/bin/conda init bash
+          $CONDa/bin/conda info | grep -i 'base environment'
+          source $CONDA/etc/profile.d/conda.sh
           eval "$(${CONDA}/bin/conda shell.bash hook)"
           $CONDA/bin/conda activate base
           $CONDA/bin/conda install -c anaconda flake8
