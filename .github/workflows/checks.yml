@@ -1,6 +1,6 @@
-name checks.yml
+name: checks
 
-on: [push, pull_rqeuest]
+on: [push, pull_request]
 
 jobs:
   check:
