@@ -1,0 +1,34 @@
+name checks.yml
+
+on: [push, pull_rqeuest]
+
+jobs:
+  check:
+    runs-on: ubuntu-18.04
+    steps:
+      - uses: actions/checkout@v2
+      - name: Setup Dependencies
+        run: |
+          sudo apt update -qq
+          sudo apt -y --allow-downgrades --allow-remove-essential --allow-change-held-packages install wget
+          wget https://repo.anaconda.com/miniconda/Miniconda3-py39_4.10.3-Linux-x86_64.sh
+          bash Miniconda3-latest-Linux-x86_64.sh
+          conda install pytorch cpuonly -c pytorch
+          conda install -c pytorch torchtext spacy matplotlib seaborn altair
+          conda install -c anaconda flake8
+          conda install -c conda-forge black
+      - name: style
+        # https://github.community/t/how-can-i-access-the-current-repo-context-and-files-from-a-docker-container-action/17711
+        run: |
+          flake8 --ignore "N801, E203, E266, E501, W503, F812, E741, N803, N802, N806" /github/workspace
+
+
+
+        
+
+
+      
+
+
+
+
