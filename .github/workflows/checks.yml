@@ -7,11 +7,12 @@ jobs:
     runs-on: ubuntu-18.04
     steps:
       - uses: actions/checkout@v2
-      - name: Setup Dependencies
+      - name: Setup Python 3.9
         # https://autobencoder.com/2020-08-24-conda-actions/
         uses: actions/setup-python@v2
         with:
           python-version: 3.9
+      - name: Package Installations
         run: |
           $CONDA/bin/conda install pytorch cpuonly -c pytorch
           $CONDA/bin/conda install -c pytorch torchtext spacy matplotlib seaborn altair
