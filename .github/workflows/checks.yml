@@ -8,15 +8,15 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - name: Setup Dependencies
+        # https://autobencoder.com/2020-08-24-conda-actions/
+        uses: actions/setup-python@v2
+        with:
+          python-version: 3.9
         run: |
-          sudo apt update -qq
-          sudo apt -y --allow-downgrades --allow-remove-essential --allow-change-held-packages install wget
-          wget https://repo.anaconda.com/miniconda/Miniconda3-py39_4.10.3-Linux-x86_64.sh
-          bash Miniconda3-latest-Linux-x86_64.sh
-          conda install pytorch cpuonly -c pytorch
-          conda install -c pytorch torchtext spacy matplotlib seaborn altair
-          conda install -c anaconda flake8
-          conda install -c conda-forge black
+          $CONDA/bin/conda install pytorch cpuonly -c pytorch
+          $CONDA/bin/conda install -c pytorch torchtext spacy matplotlib seaborn altair
+          $CONDA/bin/conda install -c anaconda flake8
+          $CONDA/bin/conda install -c conda-forge black
       - name: style
         # https://github.community/t/how-can-i-access-the-current-repo-context-and-files-from-a-docker-container-action/17711
         run: |
