@@ -17,6 +17,7 @@ jobs:
           $CONDA/bin/conda install pytorch cpuonly -c pytorch
           $CONDA/bin/conda install -c pytorch torchtext spacy matplotlib seaborn altair
           $CONDA/bin/conda install -c conda-forge black
+          $CONDA/bin/conda init bash
       - name: style
         # https://github.community/t/how-can-i-access-the-current-repo-context-and-files-from-a-docker-container-action/17711
         run: |
