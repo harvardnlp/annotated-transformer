@@ -8,10 +8,14 @@ To produce the `.ipynb` notebook file using the markdown source, run:
 make notebook
 ```
 
-To produce the `.ipynb` notebook file using the markdown source with all cells executed, run:
+To produce the `.ipynb` notebook file using the markdown source with all cells executed, run (note that this will abort of there are any errors in the notebook):
 
 ```
 make execute
 ```
 
-Note that this will abort of there are any errors in the notebook.
+To produce the html version of the notebook, run:
+
+```
+make html
+```
