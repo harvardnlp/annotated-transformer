@@ -22,7 +22,7 @@ jobs:
         pip install black
         pip install torch torchtext
         pip install -U pip setuptools wheel
-        pip install -U spacy matplotlib seaborn altair jupyterlab
+        pip install -U spacy matplotlib seaborn altair jupyterlab jupytext
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
         if [ -f requirements.dev.txt ]; then pip install -r requirements.dev.txt; fi
     - name: Lint with flake8
