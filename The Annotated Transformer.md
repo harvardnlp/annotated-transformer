@@ -906,7 +906,7 @@ class MultiGPULossCompute:
         for i in range(0, out_scatter[0].size(1), chunk_size):
             # Predict distributions
             out_column = [[o[:, i:i+chunk_size].data.requires_grad_(self.opt is not None) 
-                           for o in out_scatter]
+                           for o in out_scatter]]
             gen = nn.parallel.parallel_apply(generator, out_column)
 
             # Compute loss. 
