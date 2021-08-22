@@ -286,8 +286,8 @@ def run_epoch(data_iter, model, loss_compute):
     total_tokens = 0
     total_loss = 0
     tokens = 0
-    pdb.set_trace()
     for i, batch in enumerate(data_iter):
+        pdb.set_trace()
         out = model.forward(batch.src, batch.trg, 
                             batch.src_mask, batch.trg_mask)
         loss = loss_compute(out, batch.trg_y, batch.ntokens)
@@ -502,18 +502,24 @@ def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab, devic
     
     src = torch.stack(src_list)
     tgt = torch.stack(tgt_list)
-    return src.to(device), tgt.to(device)
+    # return src.to(device), tgt.to(device)
+    return src, tgt
 
 
-def test_iterator(devices):
+def create_dataloaders(devices, batch_size=12000):
     collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
-    train_iter, val_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-    train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
+    train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
+    train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=batch_size,
                                   shuffle=True, collate_fn=collate_fn)
-    test_iterator = iter(train_dataloader)
-    test_batch = next(test_iterator)
-    print(test_batch[0].shape) # source samples
-    print(test_batch[1].shape) # target samples
+    valid_dataloader = DataLoader(to_map_style_dataset(valid_iter), batch_size=batch_size,
+                                  shuffle=True, collate_fn=collate_fn)
+    return train_dataloader, valid_dataloader
+
+def check_dataloader(train_dataloader):
+    iterator = iter(train_dataloader)
+    batch = next(iterator)
+    print(batch[0].shape) # source samples
+    print(batch[1].shape) # target samples
 
 class MultiGPULossCompute:
     "A multi-gpu loss compute and train function."
@@ -576,32 +582,32 @@ class MultiGPULossCompute:
 def initialize_model(devices, vocab_src, vocab_tgt):
     pad_idx = vocab_tgt["<blank>"]
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.cuda()
+    # model.cuda()
     criterion = LabelSmoothing(size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1)
-    criterion.cuda()
+    # criterion.cuda()
     BATCH_SIZE = 12000
-    train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-    train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
-                                  shuffle=True, collate_fn=collate_fn)
-    valid_dataloader = DataLoader(to_map_style_dataset(valid_iter), batch_size=12000,
-                                  shuffle=True, collate_fn=collate_fn)
-    model_par = nn.DataParallel(model, device_ids=devices)
-    return model, model_par
+    # model_par = nn.DataParallel(model, device_ids=devices)
+    model_par = None
+    return model, model_par, criterion
 
+def rebatch(pad_idx, batch):
+    "Fix order in torchtext to match ours"
+    # src, trg = batch[0].transpose(0, 1), batch[1].transpose(0, 1)
+    src, trg = batch[0], batch[1]
+    return Batch(src, trg, pad_idx)
 
-def test_create_model():
-    create_model = True
+def train_model(model, model_par, criterion, pad_idx, train_dataloader, valid_dataloader, create_model=True):
     if create_model:
         model_opt = NoamOpt(model.src_embed[0].d_model, 1, 2000,
                 torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
         for epoch in range(10):
             model_par.train()
-            run_epoch((rebatch(pad_idx, b) for b in train_iter), 
+            run_epoch((rebatch(pad_idx, b) for b in train_dataloader), 
                       model_par, 
                       MultiGPULossCompute(model.generator, criterion, 
                                           devices=devices, opt=model_opt))
             model_par.eval()
-            loss = run_epoch((rebatch(pad_idx, b) for b in valid_iter), 
+            loss = run_epoch((rebatch(pad_idx, b) for b in valid_dataloader), 
                               model_par, 
                               MultiGPULossCompute(model.generator, criterion, 
                               devices=devices, opt=None))
@@ -690,18 +696,12 @@ if __name__ == "__main__":
     vocab_src, vocab_tgt = build_vocab()
 
     print("Creating data loaders")
-    devices = range(torch.cuda.device_count()) # TODO - make this more general
-    collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
-    train_iter, val_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-    train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
-                                  shuffle=True, collate_fn=collate_fn)
-    test_iterator = iter(train_dataloader)
-    test_batch = next(test_iterator)
-    print(test_batch[0].shape) # source samples
-    print(test_batch[1].shape) # target samples
+    devices = range(torch.cuda.device_count())
+    train_dataloader, valid_dataloader = create_dataloaders(devices, batch_size=128)
 
     print("Creating model")
-    devices = [1]
-    model, model_par = initialize_model(devices, vocab_src, vocab_tgt)
-    print(vocab_src)
+    pad_idx = vocab_tgt["<blank>"]
+    model, model_par, criterion = initialize_model(devices, vocab_src, vocab_tgt)
+    print("Training model")
+    train_model(model, model, criterion, pad_idx, train_dataloader, valid_dataloader)
     None

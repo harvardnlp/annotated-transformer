@@ -48,6 +48,11 @@ import math, copy, time
 import matplotlib.pyplot as plt
 import seaborn
 seaborn.set_context(context="talk")
+from torchtext.data.functional import to_map_style_dataset
+import pdb
+
+
+
 %matplotlib inline
 ```
 
@@ -513,15 +518,12 @@ class Batch:
 ## Training Loop
 
 ```python
-import pdb
-
 def run_epoch(data_iter, model, loss_compute):
     "Standard Training and Logging Function"
     start = time.time()
     total_tokens = 0
     total_loss = 0
     tokens = 0
-    pdb.set_trace()
     for i, batch in enumerate(data_iter):
         out = model.forward(batch.src, batch.trg, 
                             batch.src_mask, batch.trg_mask)
@@ -831,7 +833,7 @@ print(len(vocab_tgt))
 ## Iterators
 <!-- #endregion -->
 
-```python
+```python tags=[]
 from torch.utils.data import DataLoader
 from torch.nn.functional import pad
 
@@ -853,24 +855,19 @@ collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_
 ```
 
 ```python
-from torchtext.data.functional import to_map_style_dataset
-
-train_iter, val_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-
-train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
-                              shuffle=True, collate_fn=collate_fn)
+def create_dataloaders(devices, batch_size=12000):
+    collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
+    train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
+    train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=batch_size,
+                                  shuffle=True, collate_fn=collate_fn)
+    valid_dataloader = DataLoader(to_map_style_dataset(valid_iter), batch_size=batch_size,
+                                  shuffle=True, collate_fn=collate_fn)
+    return train_dataloader, valid_dataloader
 ```
 
 Make an iterator out of the dataloader and test sampling one batch.
 
 TODO: still need to replicate MyIterator logic which construct batches grouping together text of similar length
-
-```python
-test_iterator = iter(train_dataloader)
-test_batch = next(test_iterator)
-print(test_batch[0].shape) # source samples
-print(test_batch[1].shape) # target samples
-```
 
 <!-- #region tags=[] -->
 ## Multi-GPU Training
@@ -957,22 +954,9 @@ model = make_model(len(vocab_src), len(vocab_tgt), N=6)
 model.cuda()
 criterion = LabelSmoothing(size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1)
 criterion.cuda()
+
 BATCH_SIZE = 12000
-    
-train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-
-train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
-                              shuffle=True, collate_fn=collate_fn)
-
-valid_dataloader = DataLoader(to_map_style_dataset(valid_iter), batch_size=12000,
-                              shuffle=True, collate_fn=collate_fn)
-
-#    train_iter = MyIterator(trainDataset, batch_size=BATCH_SIZE, device=0,
-#                            repeat=False, sort_key=lambda x: (len(x[SOURCE]), len(x[TARGET])),
-#                            batch_size_fn=batch_size_fn, train=True)
-#    valid_iter = MyIterator(valDataset, batch_size=BATCH_SIZE, device=0,
-#                            repeat=False, sort_key=lambda x: (len(x[SOURCE]), len(x[TARGET])),
-#                            batch_size_fn=batch_size_fn, train=False)
+train_dataloader, valid_dataloader = create_dataloaders(devices, BATCH_SIZE)
 
 model_par = nn.DataParallel(model, device_ids=devices)
 ```
@@ -991,6 +975,13 @@ model_par = nn.DataParallel(model, device_ids=devices)
 ```
 
 ```python
+def rebatch(pad_idx, batch):
+    "Fix order in torchtext to match ours"
+    src, trg = batch[0], batch[1]
+    return Batch(src, trg, pad_idx)
+```
+
+```python
 create_model = True
 
 if create_model:
@@ -998,22 +989,18 @@ if create_model:
             torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
     for epoch in range(10):
         model_par.train()
-        run_epoch((rebatch(pad_idx, b) for b in train_iter), 
+        run_epoch((rebatch(pad_idx, b) for b in train_dataloader), 
                   model_par, 
                   MultiGPULossCompute(model.generator, criterion, 
                                       devices=devices, opt=model_opt))
         model_par.eval()
-        loss = run_epoch((rebatch(pad_idx, b) for b in valid_iter), 
+        loss = run_epoch((rebatch(pad_idx, b) for b in valid_dataloader), 
                           model_par, 
                           MultiGPULossCompute(model.generator, criterion, 
                           devices=devices, opt=None))
         print(loss)
 else:
     model = torch.load("iwslt.pt")
-```
-
-```python
-%pdb
 ```
 
 > Once trained we can decode the model to produce a set of translations. Here we simply translate the first sentence in the validation set. This dataset is pretty small so the translations with greedy search are reasonably accurate. 
