@@ -455,23 +455,6 @@ def greedy_test():
     src_mask = torch.ones(1, 1, 10)
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
 
-# -
-
-# # A Real World Example
-#
-# > Now we consider a real-world example using the IWSLT German-English Translation task. This task is much smaller than the WMT task considered in the paper, but it illustrates the whole system. We also show how to use multi-gpu processing to make it really fast.
-
-# + tags=[]
-# #!pip install torchtext spacy
-# #!python -m spacy download en
-# #!python -m spacy download de
-
-# + [markdown] tags=[]
-# ## Data Loading
-# > We will load the dataset using torchtext and spacy for tokenization. 
-
-# + tags=[]
-
 spacy_de = spacy.load('de')
 spacy_en = spacy.load('en')
 
@@ -522,8 +505,7 @@ def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab, devic
     return src.to(device), tgt.to(device)
 
 
-def test_iterator():
-    devices = range(torch.cuda.device_count()) # TODO - make this more general
+def test_iterator(devices):
     collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
     train_iter, val_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
     train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
@@ -591,8 +573,7 @@ class MultiGPULossCompute:
             self.opt.optimizer.zero_grad()
         return total * normalize
 
-def initialize_model():
-    devices = range(torch.cuda.device_count())
+def initialize_model(devices, vocab_src, vocab_tgt):
     pad_idx = vocab_tgt["<blank>"]
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.cuda()
@@ -720,5 +701,7 @@ if __name__ == "__main__":
     print(test_batch[1].shape) # target samples
 
     print("Creating model")
-    model, model_par = initialize_model()
+    devices = [1]
+    model, model_par = initialize_model(devices, vocab_src, vocab_tgt)
+    print(vocab_src)
     None
