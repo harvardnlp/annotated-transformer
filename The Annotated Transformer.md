@@ -513,12 +513,15 @@ class Batch:
 ## Training Loop
 
 ```python
+import pdb
+
 def run_epoch(data_iter, model, loss_compute):
     "Standard Training and Logging Function"
     start = time.time()
     total_tokens = 0
     total_loss = 0
     tokens = 0
+    pdb.set_trace()
     for i, batch in enumerate(data_iter):
         out = model.forward(batch.src, batch.trg, 
                             batch.src_mask, batch.trg_mask)
@@ -547,14 +550,6 @@ Sentence pairs were batched together by approximate sequence length.  Each train
 > We will use torch text for batching. This is discussed in more detail below. Here we create batches in a torchtext function that ensures our batch size padded to the maximum batchsize does not surpass a threshold (25000 if we have 8 gpus).
 
 ```python
-SOURCE = 0
-TARGET = 1
-```
-
-```python
-SOURCE = 0
-TARGET = 1
-
 global max_src_in_batch, max_tgt_in_batch
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -562,8 +557,8 @@ def batch_size_fn(new, count, sofar):
     if count == 1:
         max_src_in_batch = 0
         max_tgt_in_batch = 0
-    max_src_in_batch = max(max_src_in_batch,  len(new[SOURCE]))
-    max_tgt_in_batch = max(max_tgt_in_batch,  len(new[TARGET]) + 2)
+    max_src_in_batch = max(max_src_in_batch,  len(new[0]))
+    max_tgt_in_batch = max(max_tgt_in_batch,  len(new[1]) + 2)
     src_elements = count * max_src_in_batch
     tgt_elements = count * max_tgt_in_batch
     return max(src_elements, tgt_elements)
@@ -810,13 +805,13 @@ def yield_tokens(data_iter, tokenizer, index):
 ```
 
 ```python tags=[]
-print("Building German Vocabulary")
+print("Building German Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=('de', 'en'))
 vocab_src = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_de, index=0),
                                      min_freq=2,
                                      specials=['<s>','</s>','<blank>','<unk>'])
 
-print("Building English Vocabulary")
+print("Building English Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=('de', 'en'))
 vocab_tgt = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_en, index=1),
                                      min_freq=2,
@@ -824,18 +819,23 @@ vocab_tgt = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_
 
 vocab_src.set_default_index(vocab_src["<unk>"])
 vocab_tgt.set_default_index(vocab_tgt["<unk>"])
+
+print("Finished. Vocabulary sizes are:")
+print(len(vocab_src))
+print(len(vocab_tgt))
 ```
 
 > Batching matters a ton for speed. We want to have very evenly divided batches, with absolutely minimal padding. To do this we have to hack a bit around the default torchtext batching. This code patches their default batching to make sure we search over enough sentences to find tight batches. 
 
-
+<!-- #region tags=[] jp-MarkdownHeadingCollapsed=true -->
 ## Iterators
+<!-- #endregion -->
 
 ```python
 from torch.utils.data import DataLoader
 from torch.nn.functional import pad
 
-def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab,max_padding=128,pad_id=0):
+def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab, device, max_padding=128, pad_id=0):
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
          processed_src = torch.tensor(src_vocab(src_pipeline(_src)), dtype=torch.int64)
@@ -847,7 +847,9 @@ def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab,max_pa
     tgt = torch.stack(tgt_list)
     return src.to(device), tgt.to(device)
 
-collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt)
+devices = range(torch.cuda.device_count()) # TODO - make this more general
+
+collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
 ```
 
 ```python
@@ -859,14 +861,18 @@ train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000
                               shuffle=True, collate_fn=collate_fn)
 ```
 
-```python
-# TODO: organize batches to minimize padding
-```
+Make an iterator out of the dataloader and test sampling one batch.
+
+TODO: still need to replicate MyIterator logic which construct batches grouping together text of similar length
 
 ```python
-next(iter(train_dataloader))
+test_iterator = iter(train_dataloader)
+test_batch = next(test_iterator)
+print(test_batch[0].shape) # source samples
+print(test_batch[1].shape) # target samples
 ```
 
+<!-- #region tags=[] -->
 ## Multi-GPU Training
 
 > Finally to really target fast training, we will use multi-gpu. This code implements multi-gpu word generation. It is not specific to transformer so I won't go into too much detail. The idea is to split up word generation at training time into chunks to be processed in parallel across many different gpus. We do this using pytorch parallel primitives:
@@ -877,6 +883,7 @@ next(iter(train_dataloader))
 * gather - pull scattered data back onto one gpu. 
 * nn.DataParallel - a special module wrapper that calls these all before evaluating. 
 
+<!-- #endregion -->
 
 ```python tags=[]
 # Skip if not interested in multigpu.
@@ -1005,6 +1012,10 @@ else:
     model = torch.load("iwslt.pt")
 ```
 
+```python
+%pdb
+```
+
 > Once trained we can decode the model to produce a set of translations. Here we simply translate the first sentence in the validation set. This dataset is pretty small so the translations with greedy search are reasonably accurate. 
 
 ```python
@@ -1057,7 +1068,7 @@ if False:
 
 > 4) Model Averaging: The paper averages the last k checkpoints to create an ensembling effect. We can do this after the fact if we have a bunch of models:
 
-```python jupyter={"outputs_hidden": true}
+```python
 def average(model, models):
     "Average models into model"
     for ps in zip(*[m.params() for m in [model] + models]):
@@ -1088,15 +1099,15 @@ Image(filename="images/results.png")
 >
 > With the addtional extensions in the last section, the OpenNMT-py replication gets to 26.9 on EN-DE WMT. Here I have loaded in those parameters to our reimplemenation. 
 
-```python jupyter={"outputs_hidden": true}
+```python
 !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 ```
 
-```python jupyter={"outputs_hidden": true}
+```python
 model, SRC, TGT = torch.load("en-de-model.pt")
 ```
 
-```python jupyter={"outputs_hidden": true}
+```python
 
 ```
 
