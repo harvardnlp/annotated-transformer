@@ -8,16 +8,17 @@ jupyter:
       format_version: '1.3'
       jupytext_version: 1.11.4
   kernelspec:
-    display_name: 'Python 3.7.4 64-bit (''base'': conda)'
+    display_name: Python 3
+    language: python
     name: python3
 ---
 
-```python id="oOv5LHL417ek"
+```python id="K5Rh7ZCJTsp4"
 from IPython.display import Image
 Image(filename='images/aiayn.png')
 ```
 
-<!-- #region id="QPnynUEN17em" -->
+<!-- #region id="SX7UC-8jTsp7" -->
 The Transformer from ["Attention is All You Need"](https://arxiv.org/abs/1706.03762) has been on a lot of people's minds over the last year. Besides producing major improvements in translation quality, it provides a new architecture for many other NLP tasks. The paper itself is very clearly written, but the conventional wisdom has been that it is quite difficult to implement correctly. 
 
 In this post I present an "annotated" version of the paper in the form of a line-by-line implementation. I have reordered and deleted some sections from the original paper and added comments throughout. This document itself is a working notebook, and should be a completely usable implementation. In total there are 400 lines of library code which can process 27,000 tokens per second on 4 GPUs. 
@@ -30,19 +31,19 @@ Note this is merely a starting point for researchers and interested developers. 
 
 <!-- #endregion -->
 
-<!-- #region id="ynpbutuR17en" -->
+<!-- #region id="BhmOhn9lTsp8" -->
 # Prelims
 <!-- #endregion -->
 
-```python id="wTJG8wuw17eo"
+```python id="NwClcbH6Tsp8"
 # !conda install -c pytorch torchtext spacy matplotlib seaborn numpy
 ```
 
-```python tags=[] id="akC02RJq17ep"
+```python tags=[] id="hin0sxaITsp9"
 # !pip install http://download.pytorch.org/whl/cu80/torch-0.3.0.post4-cp36-cp36m-linux_x86_64.whl numpy matplotlib spacy torchtext seaborn 
 ```
 
-```python id="qRo6eURh17ep"
+```python id="v1-1MX6oTsp9"
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -50,10 +51,15 @@ import math, copy, time
 import matplotlib.pyplot as plt
 import seaborn
 seaborn.set_context(context="talk")
+from torchtext.data.functional import to_map_style_dataset
+import pdb
+from torch.optim.lr_scheduler import LambdaLR
+
+
 %matplotlib inline
 ```
 
-<!-- #region id="fwfJ3VlI17ep" -->
+<!-- #region id="RSntDwKhTsp-" -->
 Table of Contents
 
 
@@ -61,15 +67,15 @@ Table of Contents
 {:toc}      
 <!-- #endregion -->
 
-<!-- #region id="Z2c8WGxq17eq" -->
+<!-- #region id="jx49WRyfTsp-" -->
 > My comments are blockquoted. The main text is all from the paper itself.
 <!-- #endregion -->
 
-<!-- #region id="a33Z6NiM17er" -->
+<!-- #region id="7phVeWghTsp_" -->
 # Background
 <!-- #endregion -->
 
-<!-- #region id="-hihSxgW17es" -->
+<!-- #region id="83ZDS91dTsqA" -->
 The goal of reducing sequential computation also forms the foundation of the Extended Neural GPU, ByteNet and ConvS2S, all of which use convolutional neural networks as basic building block, computing hidden representations in parallel for all input and output positions. In these models, the number of operations required to relate signals from two arbitrary input or output positions grows in the distance between positions, linearly for ConvS2S and logarithmically for ByteNet. This makes it more difficult to learn dependencies between distant positions. In the Transformer this is reduced to a constant number of operations, albeit at the cost of reduced effective resolution due to averaging attention-weighted positions, an effect we counteract with Multi-Head Attention.
 
 Self-attention, sometimes called intra-attention is an attention mechanism relating different positions of a single sequence in order to compute a representation of the sequence. Self-attention has been used successfully in a variety of tasks including reading comprehension, abstractive summarization, textual entailment and learning task-independent sentence representations. End-to-end memory networks are based on a recurrent attention mechanism instead of sequencealigned recurrence and have been shown to perform well on simple-language question answering and
@@ -78,15 +84,15 @@ language modeling tasks.
 To the best of our knowledge, however, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequence aligned RNNs or convolution. 
 <!-- #endregion -->
 
-<!-- #region id="EPAPgGcu17es" -->
+<!-- #region id="pFrPajezTsqB" -->
 # Model Architecture
 <!-- #endregion -->
 
-<!-- #region id="lcdOe4_l17es" -->
+<!-- #region id="ReuU_h-fTsqB" -->
 Most competitive neural sequence transduction models have an encoder-decoder structure [(cite)](https://arxiv.org/abs/1409.0473). Here, the encoder maps an input sequence of symbol representations $(x_1, ..., x_n)$ to a sequence of continuous representations $\mathbf{z} = (z_1, ..., z_n)$. Given $\mathbf{z}$, the decoder then generates an output sequence $(y_1,...,y_m)$ of symbols one element at a time. At each step the model is auto-regressive [(cite)](https://arxiv.org/abs/1308.0850), consuming the previously generated symbols as additional input when generating the next. 
 <!-- #endregion -->
 
-```python id="BFOmurC317et"
+```python id="k0XGXhzRTsqB"
 class EncoderDecoder(nn.Module):
     """
     A standard Encoder-Decoder architecture. Base for this and many 
@@ -112,7 +118,7 @@ class EncoderDecoder(nn.Module):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
 ```
 
-```python id="0bWNJQq117et"
+```python id="NKGoH2RsTsqC"
 class Generator(nn.Module):
     "Define standard linear + softmax generation step."
     def __init__(self, d_model, vocab):
@@ -123,15 +129,15 @@ class Generator(nn.Module):
         return F.log_softmax(self.proj(x), dim=-1)
 ```
 
-<!-- #region id="7uwIY5Bn17et" -->
+<!-- #region id="mOoEnF_jTsqC" -->
 The Transformer follows this overall architecture using stacked self-attention and point-wise, fully connected layers for both the encoder and decoder, shown in the left and right halves of Figure 1, respectively. 
 <!-- #endregion -->
 
-```python id="4d35Yy-117eu"
+```python id="oredWloYTsqC"
 Image(filename='images/ModalNet-21.png')
 ```
 
-<!-- #region id="F-4BJ4yH17eu" -->
+<!-- #region id="bh092NZBTsqD" -->
 ## Encoder and Decoder Stacks   
 
 ### Encoder
@@ -139,13 +145,13 @@ Image(filename='images/ModalNet-21.png')
 The encoder is composed of a stack of $N=6$ identical layers. 
 <!-- #endregion -->
 
-```python id="SF1wi-fG17eu"
+```python id="2gxTApUYTsqD"
 def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 ```
 
-```python colab={"base_uri": "https://localhost:8080/", "height": 244} id="47Hvo0Aw17eu" outputId="550346d4-8b09-4b9e-9681-ed17ff84c6cb"
+```python id="xqVTz9MkTsqD"
 class Encoder(nn.Module):
     "Core encoder is a stack of N layers"
     def __init__(self, layer, N):
@@ -160,11 +166,11 @@ class Encoder(nn.Module):
         return self.norm(x)
 ```
 
-<!-- #region id="NqnbJbrN17ev" -->
+<!-- #region id="GjAKgjGwTsqD" -->
 We employ a residual connection [(cite)](https://arxiv.org/abs/1512.03385) around each of the two sub-layers, followed by layer normalization [(cite)](https://arxiv.org/abs/1607.06450).  
 <!-- #endregion -->
 
-```python id="X6-AQd8s17ev"
+```python id="3jKa_prZTsqE"
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
     def __init__(self, features, eps=1e-6):
@@ -179,13 +185,13 @@ class LayerNorm(nn.Module):
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
 ```
 
-<!-- #region id="CQZhQZp_17ev" -->
+<!-- #region id="nXSJ3QYmTsqE" -->
 That is, the output of each sub-layer is $\mathrm{LayerNorm}(x + \mathrm{Sublayer}(x))$, where $\mathrm{Sublayer}(x)$ is the function implemented by the sub-layer itself.  We apply dropout [(cite)](http://jmlr.org/papers/v15/srivastava14a.html) to the output of each sub-layer, before it is added to the sub-layer input and normalized.  
 
 To facilitate these residual connections, all sub-layers in the model, as well as the embedding layers, produce outputs of dimension $d_{\text{model}}=512$.  
 <!-- #endregion -->
 
-```python id="OFyKKtSd17ev"
+```python id="U1P7zI0eTsqE"
 class SublayerConnection(nn.Module):
     """
     A residual connection followed by a layer norm.
@@ -201,11 +207,11 @@ class SublayerConnection(nn.Module):
         return x + self.dropout(sublayer(self.norm(x)))
 ```
 
-<!-- #region id="dqQ7s3qO17ew" -->
+<!-- #region id="ML6oDlEqTsqE" -->
 Each layer has two sub-layers. The first is a multi-head self-attention mechanism, and the second is a simple, position-wise fully connected feed-forward network.
 <!-- #endregion -->
 
-```python id="zglEyTvz17ew"
+```python id="qYkUFr6GTsqE"
 class EncoderLayer(nn.Module):
     "Encoder is made up of self-attn and feed forward (defined below)"
     def __init__(self, size, self_attn, feed_forward, dropout):
@@ -221,14 +227,14 @@ class EncoderLayer(nn.Module):
         return self.sublayer[1](x, self.feed_forward)
 ```
 
-<!-- #region id="2O_X5wYD17ew" -->
+<!-- #region id="7ecOQIhkTsqF" -->
 ### Decoder
 
 The decoder is also composed of a stack of $N=6$ identical layers.  
 
 <!-- #endregion -->
 
-```python id="Jm9HPEL_17ew"
+```python id="YE2KBGZETsqF"
 class Decoder(nn.Module):
     "Generic N layer decoder with masking."
     def __init__(self, layer, N):
@@ -242,11 +248,11 @@ class Decoder(nn.Module):
         return self.norm(x)
 ```
 
-<!-- #region id="01HA1dO017ew" -->
+<!-- #region id="dXlCB12pTsqF" -->
 In addition to the two sub-layers in each encoder layer, the decoder inserts a third sub-layer, which performs multi-head attention over the output of the encoder stack.  Similar to the encoder, we employ residual connections around each of the sub-layers, followed by layer normalization.  
 <!-- #endregion -->
 
-```python id="OIFAK59717ew"
+```python id="M2hA1xFQTsqF"
 class DecoderLayer(nn.Module):
     "Decoder is made of self-attn, src-attn, and feed forward (defined below)"
     def __init__(self, size, self_attn, src_attn, feed_forward, dropout):
@@ -265,11 +271,11 @@ class DecoderLayer(nn.Module):
         return self.sublayer[2](x, self.feed_forward)
 ```
 
-<!-- #region id="HwfddTwk17ex" -->
+<!-- #region id="FZz5rLl4TsqF" -->
 We also modify the self-attention sub-layer in the decoder stack to prevent positions from attending to subsequent positions.  This masking, combined with fact that the output embeddings are offset by one position, ensures that the predictions for position $i$ can depend only on the known outputs at positions less than $i$.
 <!-- #endregion -->
 
-```python id="j5S30SCi17ex"
+```python id="QN98O2l3TsqF"
 def subsequent_mask(size):
     "Mask out subsequent positions."
     attn_shape = (1, size, size)
@@ -277,16 +283,16 @@ def subsequent_mask(size):
     return subsequent_mask == 0
 ```
 
-<!-- #region id="E6QGBMO617ex" -->
+<!-- #region id="Vg_f_w-PTsqG" -->
 > Below the attention mask shows the position each tgt word (row) is allowed to look at (column). Words are blocked for attending to future words during training.
 <!-- #endregion -->
 
-```python id="5Y5b257F17ex"
+```python colab={"base_uri": "https://localhost:8080/", "height": 351} id="7BjH7LmjTsqG" outputId="c2d077fa-6faf-411b-bef4-f3a9a331d109"
 plt.figure(figsize=(5,5))
 plt.imshow(subsequent_mask(20)[0])
 ```
 
-<!-- #region id="kkf0_Etw17ex" -->
+<!-- #region id="Qto_yg7BTsqG" -->
 ### Attention                                                                                                                                                                                                                                                                             
 An attention function can be described as mapping a query and a set of key-value pairs to an output, where the query, keys, values, and output are all vectors.  The output is computed as a weighted sum of the values, where the weight assigned to each value is computed by a compatibility function of the query with the corresponding key.                                                                                                                                                                                                                                                                                   
 
@@ -294,12 +300,12 @@ We call our particular attention "Scaled Dot-Product Attention".   The input con
                                                                                                                                                                      
 <!-- #endregion -->
 
-```python id="iUDcqWgL17ex"
+```python id="TGARcrk3TsqG"
 Image(filename='images/ModalNet-19.png')
 ```
 
 
-<!-- #region id="Vd0inQBU17ex" -->
+<!-- #region id="EYJLWk6cTsqG" -->
 In practice, we compute the attention function on a set of queries simultaneously, packed together into a matrix $Q$.   The keys and values are also packed together into matrices $K$ and $V$.  We compute the matrix of outputs as:                      
                                                                  
 $$                                                                         
@@ -307,11 +313,7 @@ $$
 $$   
 <!-- #endregion -->
 
-```python
-Image(filename='images/qkv-function.png')
-```
-
-```python id="d7g6bLFT17ex"
+```python id="qsoVxS5yTsqG"
 def attention(query, key, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
@@ -325,22 +327,22 @@ def attention(query, key, value, mask=None, dropout=None):
     return torch.matmul(p_attn, value), p_attn
 ```
 
-<!-- #region id="QuMQb3bR17ex" -->
+<!-- #region id="jUkpwu8kTsqG" -->
 The two most commonly used attention functions are additive attention [(cite)](https://arxiv.org/abs/1409.0473), and dot-product (multiplicative) attention.  Dot-product attention is identical to our algorithm, except for the scaling factor of $\frac{1}{\sqrt{d_k}}$. Additive attention computes the compatibility function using a feed-forward network with a single hidden layer.  While the two are similar in theoretical complexity, dot-product attention is much faster and more space-efficient in practice, since it can be implemented using highly optimized matrix multiplication code.                                                                                             
 
                                                                         
 While for small values of $d_k$ the two mechanisms perform similarly, additive attention outperforms dot product attention without scaling for larger values of $d_k$ [(cite)](https://arxiv.org/abs/1703.03906). We suspect that for large values of $d_k$, the dot products grow large in magnitude, pushing the softmax function into regions where it has extremely small gradients  (To illustrate why the dot products get large, assume that the components of $q$ and $k$ are independent random variables with mean $0$ and variance $1$.  Then their dot product, $q \cdot k = \sum_{i=1}^{d_k} q_ik_i$, has mean $0$ and variance $d_k$.). To counteract this effect, we scale the dot products by $\frac{1}{\sqrt{d_k}}$.          
 <!-- #endregion -->
-<!-- #region id="mj0MfAjV17ey" -->
+<!-- #region id="xBebydBcTsqG" -->
 
  
 <!-- #endregion -->
 
-```python id="t01jlFp117ey"
+```python id="bS1FszhVTsqG"
 Image(filename='images/ModalNet-20.png')
 ```
 
-<!-- #region id="rixzd5Jo17ey" -->
+<!-- #region id="TNtVyZ-pTsqH" -->
 Multi-head attention allows the model to jointly attend to information from different representation subspaces at different positions. With a single attention head, averaging inhibits this.                                            
 $$    
 \mathrm{MultiHead}(Q, K, V) = \mathrm{Concat}(\mathrm{head_1}, ..., \mathrm{head_h})W^O    \\                                           
@@ -350,11 +352,7 @@ $$
 Where the projections are parameter matrices $W^Q_i \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $W^K_i \in \mathbb{R}^{d_{\text{model}} \times d_k}$, $W^V_i \in \mathbb{R}^{d_{\text{model}} \times d_v}$ and $W^O \in \mathbb{R}^{hd_v \times d_{\text{model}}}$.                                                                                                                                                                                             In this work we employ $h=8$ parallel attention layers, or heads. For each of these we use $d_k=d_v=d_{\text{model}}/h=64$. Due to the reduced dimension of each head, the total computational cost is similar to that of single-head attention with full dimensionality. 
 <!-- #endregion -->
 
-```python
-Image(filename='images/multi-head-function.png')
-```
-
-```python id="ZBqVQC1e17ey"
+```python id="D2LBMKCQTsqH"
 class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1):
         "Take in model size and number of heads."
@@ -389,7 +387,7 @@ class MultiHeadedAttention(nn.Module):
         return self.linears[-1](x)
 ```
 
-<!-- #region id="FEb9sslL17ey" -->
+<!-- #region id="EDRba3J3TsqH" -->
 ### Applications of Attention in our Model                                                                                                                                                      
 The Transformer uses multi-head attention in three different ways:                                                        
 1) In "encoder-decoder attention" layers, the queries come from the previous decoder layer, and the memory keys and values come from the output of the encoder.   This allows every position in the decoder to attend over all positions in the input sequence.  This mimics the typical encoder-decoder attention mechanisms in sequence-to-sequence models such as [(cite)](https://arxiv.org/abs/1609.08144).    
@@ -401,7 +399,7 @@ The Transformer uses multi-head attention in three different ways:
 3) Similarly, self-attention layers in the decoder allow each position in the decoder to attend to all positions in the decoder up to and including that position.  We need to prevent leftward information flow in the decoder to preserve the auto-regressive property.  We implement this inside of scaled dot-product attention by masking out (setting to $-\infty$) all values in the input of the softmax which correspond to illegal connections.                                                                                                                                                                                                                                                      
 <!-- #endregion -->
 
-<!-- #region id="wwBa9MIQ17ey" -->
+<!-- #region id="M-en97_GTsqH" -->
 ## Position-wise Feed-Forward Networks                                                                                                                                                                                                                                                                                                                                                             
                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           
 In addition to attention sub-layers, each of the layers in our encoder and decoder contains a fully connected feed-forward network, which is applied to each position separately and identically.  This consists of two linear transformations with a ReLU activation in between.
@@ -411,7 +409,7 @@ $$\mathrm{FFN}(x)=\max(0, xW_1 + b_1) W_2 + b_2$$
 While the linear transformations are the same across different positions, they use different parameters from layer to layer. Another way of describing this is as two convolutions with kernel size 1.  The dimensionality of input and output is $d_{\text{model}}=512$, and the inner-layer has dimensionality $d_{ff}=2048$. 
 <!-- #endregion -->
 
-```python id="TRHOciPq17ey"
+```python id="6HHCemCxTsqH"
 class PositionwiseFeedForward(nn.Module):
     "Implements FFN equation."
     def __init__(self, d_model, d_ff, dropout=0.1):
@@ -424,12 +422,12 @@ class PositionwiseFeedForward(nn.Module):
         return self.w_2(self.dropout(F.relu(self.w_1(x))))
 ```
 
-<!-- #region id="kqaRQQBh17ey" -->
+<!-- #region id="dR1YM520TsqH" -->
 ## Embeddings and Softmax                                                                                                                                                                                                                                                                                           
 Similarly to other sequence transduction models, we use learned embeddings to convert the input tokens and output tokens to vectors of dimension $d_{\text{model}}$.  We also use the usual learned linear transformation and softmax function to convert the decoder output to predicted next-token probabilities.  In our model, we share the same weight matrix between the two embedding layers and the pre-softmax linear transformation, similar to [(cite)](https://arxiv.org/abs/1608.05859). In the embedding layers, we multiply those weights by $\sqrt{d_{\text{model}}}$.                                                                                                                                 
 <!-- #endregion -->
 
-```python colab={"base_uri": "https://localhost:8080/", "height": 244} id="XMVpZlEx17ey" outputId="f963eae8-1794-4cc9-b6c3-5d3d6a08556a"
+```python id="pyrChq9qTsqH"
 class Embeddings(nn.Module):
     def __init__(self, d_model, vocab):
         super(Embeddings, self).__init__()
@@ -440,7 +438,7 @@ class Embeddings(nn.Module):
         return self.lut(x) * math.sqrt(self.d_model)
 ```
 
-<!-- #region id="yyuJGeRi17ey" -->
+<!-- #region id="vOkdui-cTsqH" -->
 ## Positional Encoding                                                                                                                             
 Since our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens in the sequence.  To this end, we add "positional encodings" to the input embeddings at the bottoms of the encoder and decoder stacks.  The positional encodings have the same dimension $d_{\text{model}}$ as the embeddings, so that the two can be summed.   There are many choices of positional encodings, learned and fixed [(cite)](https://arxiv.org/pdf/1705.03122.pdf). 
 
@@ -455,7 +453,7 @@ In addition, we apply dropout to the sums of the embeddings and the positional e
 
 <!-- #endregion -->
 
-```python id="Cx6rMAmp17ez"
+```python id="zaHGD4yJTsqH"
 class PositionalEncoding(nn.Module):
     "Implement the PE function."
     def __init__(self, d_model, dropout, max_len=5000):
@@ -477,11 +475,11 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 ```
 
-<!-- #region id="5ahdPgS317ez" -->
+<!-- #region id="EfHacTJLTsqH" -->
 > Below the positional encoding will add in a sine wave based on position. The frequency and offset of the wave is different for each dimension. 
 <!-- #endregion -->
 
-```python id="JIqqO09I17ez"
+```python colab={"base_uri": "https://localhost:8080/", "height": 351} id="ho6CYiRUTsqI" outputId="e78cc36c-e1df-4d0f-9e61-1fa2340dc63a"
 plt.figure(figsize=(15, 5))
 pe = PositionalEncoding(20, 0)
 y = pe.forward(torch.zeros(1, 100, 20))
@@ -489,17 +487,17 @@ plt.plot(torch.arange(100), y[0, :, 4:8])
 plt.legend(["dim %d"%p for p in [4,5,6,7]])
 ```
 
-<!-- #region id="z89fJL7-17ez" -->
+<!-- #region id="g8rZNCrzTsqI" -->
 We also experimented with using learned positional embeddings [(cite)](https://arxiv.org/pdf/1705.03122.pdf) instead, and found that the two versions produced nearly identical results.  We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.    
 <!-- #endregion -->
 
-<!-- #region id="qVeqXjz017ez" -->
+<!-- #region id="iwNKCzlyTsqI" -->
 ## Full Model
 
 > Here we define a function from hyperparameters to a full model. 
 <!-- #endregion -->
 
-```python id="3AEWjoGI17ez"
+```python id="mPe1ES0UTsqI"
 def make_model(src_vocab, tgt_vocab, N=6, 
                d_model=512, d_ff=2048, h=8, dropout=0.1):
     "Helper: Construct a model from hyperparameters."
@@ -523,27 +521,27 @@ def make_model(src_vocab, tgt_vocab, N=6,
     return model
 ```
 
-```python id="dL4a2qGF17ez"
+```python id="azdUh766TsqI"
 # Small example model.
 tmp_model = make_model(10, 10, 2)
 ```
 
-<!-- #region id="GjHD1LJj17ez" -->
+<!-- #region id="05s6oT9fTsqI" -->
 # Training
 
 This section describes the training regime for our models.
 <!-- #endregion -->
 
-<!-- #region id="NtzaRN7_17ez" -->
+<!-- #region id="fTxlofs4TsqI" -->
 > We stop for a quick interlude to introduce some of the tools 
 needed to train a standard encoder decoder model. First we define a batch object that holds the src and target sentences for training, as well as constructing the masks. 
 <!-- #endregion -->
 
-<!-- #region id="MAsqJ-PA17e0" -->
+<!-- #region id="G7SkCenXTsqI" -->
 ## Batches and Masking
 <!-- #endregion -->
 
-```python id="LqR94kzc17e0"
+```python id="OJ4VDeQkTsqI"
 class Batch:
     "Object for holding a batch of data with mask during training."
     def __init__(self, src, trg=None, pad=0):
@@ -564,15 +562,15 @@ class Batch:
         return tgt_mask
 ```
 
-<!-- #region id="eCzrgWf817e0" -->
+<!-- #region id="cKkw5GjLTsqI" -->
 > Next we create a generic training and scoring function to keep track of loss. We pass in a generic loss compute function that also handles parameter updates. 
 <!-- #endregion -->
 
-<!-- #region id="Tp6r1Zp_17e0" -->
+<!-- #region id="Q8zzeUc0TsqJ" -->
 ## Training Loop
 <!-- #endregion -->
 
-```python id="pOUgsmAG17e0"
+```python id="2HAZD3hiTsqJ"
 def run_epoch(data_iter, model, loss_compute):
     "Standard Training and Logging Function"
     start = time.time()
@@ -595,7 +593,7 @@ def run_epoch(data_iter, model, loss_compute):
     return total_loss / total_tokens
 ```
 
-<!-- #region id="HyPK7Nve17e0" -->
+<!-- #region id="aB1IF0foTsqJ" -->
 ## Training Data and Batching
 
 We trained on the standard WMT 2014 English-German dataset consisting of about 4.5 million sentence pairs.  Sentences were encoded using byte-pair encoding, which has a shared source-target vocabulary of about 37000 tokens. For English-French, we used the significantly larger WMT 2014 English-French dataset consisting of 36M sentences and split tokens into a 32000 word-piece vocabulary.
@@ -604,19 +602,11 @@ We trained on the standard WMT 2014 English-German dataset consisting of about 4
 Sentence pairs were batched together by approximate sequence length.  Each training batch contained a set of sentence pairs containing approximately 25000 source tokens and 25000 target tokens.     
 <!-- #endregion -->
 
-<!-- #region id="fgEqnIe917e0" -->
+<!-- #region id="J0w5i6oHTsqJ" -->
 > We will use torch text for batching. This is discussed in more detail below. Here we create batches in a torchtext function that ensures our batch size padded to the maximum batchsize does not surpass a threshold (25000 if we have 8 gpus).
 <!-- #endregion -->
 
-```python id="L-htAEe917e0"
-SOURCE = 0
-TARGET = 1
-```
-
-```python id="1zi-hl6c17e0"
-SOURCE = 0
-TARGET = 1
-
+```python id="-H04bCMeTsqJ"
 global max_src_in_batch, max_tgt_in_batch
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -624,19 +614,19 @@ def batch_size_fn(new, count, sofar):
     if count == 1:
         max_src_in_batch = 0
         max_tgt_in_batch = 0
-    max_src_in_batch = max(max_src_in_batch,  len(new[SOURCE]))
-    max_tgt_in_batch = max(max_tgt_in_batch,  len(new[TARGET]) + 2)
+    max_src_in_batch = max(max_src_in_batch,  len(new[0]))
+    max_tgt_in_batch = max(max_tgt_in_batch,  len(new[1]) + 2)
     src_elements = count * max_src_in_batch
     tgt_elements = count * max_tgt_in_batch
     return max(src_elements, tgt_elements)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true tags=[] id="5QD7afqT17e0" -->
+<!-- #region jp-MarkdownHeadingCollapsed=true tags=[] id="F1mTQatiTsqJ" -->
 ## Hardware and Schedule                                                                                                                                                                                                   
 We trained our models on one machine with 8 NVIDIA P100 GPUs.  For our base models using the hyperparameters described throughout the paper, each training step took about 0.4 seconds.  We trained the base models for a total of 100,000 steps or 12 hours. For our big models, step time was 1.0 seconds.  The big models were trained for 300,000 steps (3.5 days).
 <!-- #endregion -->
 
-<!-- #region id="4yWYLRfy17e0" -->
+<!-- #region id="-utZeuGcTsqJ" -->
 ## Optimizer
 
 We used the Adam optimizer [(cite)](https://arxiv.org/abs/1412.6980) with $\beta_1=0.9$, $\beta_2=0.98$ and $\epsilon=10^{-9}$.  We varied the learning rate over the course of training, according to the formula:                                                                                            
@@ -648,56 +638,79 @@ $$
 This corresponds to increasing the learning rate linearly for the first $warmup\_steps$ training steps, and decreasing it thereafter proportionally to the inverse square root of the step number.  We used $warmup\_steps=4000$.                            
 <!-- #endregion -->
 
-<!-- #region id="CPhf9DWp17e1" -->
+<!-- #region id="39FbYnt-TsqJ" -->
 > Note: This part is very important. Need to train with this setup of the model. 
 <!-- #endregion -->
 
-```python id="0ru8IN5217e1"
-class NoamOpt:
-    "Optim wrapper that implements rate."
-    def __init__(self, model_size, factor, warmup, optimizer):
-        self.optimizer = optimizer
-        self._step = 0
-        self.warmup = warmup
-        self.factor = factor
-        self.model_size = model_size
-        
-    def step(self):
-        "Update parameters and rate"
-        self._step += 1
-        for p in self.optimizer.param_groups:
-            p['lr'] = self.rate(self._step)
-        self.optimizer.step()
-        
-    def rate(self, step):
-        "Implement `lrate` above"
-        return self.factor * \
-            (self.model_size ** (-0.5) *
-            min(step ** (-0.5), step * self.warmup ** (-1.5)))
-        
-def get_std_opt(model):
-    return NoamOpt(model.src_embed[0].d_model, 2, 4000,
-            torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
-```
-
-
-<!-- #region id="EF-Cqo9Y17e1" -->
+<!-- #region id="hlbojFkjTsqJ" -->
 > Example of the curves of this model for different model sizes and for optimization hyperparameters. 
 <!-- #endregion -->
 
-```python tags=[] id="Curwfh2l17e1"
+```python id="zUz3PdAnVg4o"
+def rate(step, model_size, factor, warmup):
+    # we have to default the step to 1 for LambdaLR function to avoid zero raising to negative power.
+    if step == 0:
+       step = 1                   
+    return factor * \
+        (model_size ** (-0.5) *
+        min(step ** (-0.5), step * warmup ** (-1.5)))
+```
+
+```python id="l1bnrlnSV8J5"
+        #model_size, factor, warmup
+opts = [[512,        1,      4000],           #example 1
+        [512,        1,      8000],           #example 2
+        [256,        1,      4000]]           #example 3
+```
+
+```python id="H9Z0h9bXM8f9"
+# A dummpy for demo.
+dummy_model = make_model(10, 10, 2)
+```
+
+```python id="EbZ7X5D6MIg-"
+show_list = []
+
+from torch.optim.lr_scheduler import LambdaLR
+# we have 3 examples in opts list.
+for example in opts:
+    # run 20000 epoch for each example
+    optimizer = torch.optim.Adam(dummy_model.parameters(), lr=1, betas=(0.9, 0.98), eps=1e-9)
+    lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, *example))
+    tmp = []
+    for epoch in range(20000):
+
+        tmp.append(optimizer.param_groups[0]['lr'])
+        
+        optimizer.step()
+
+        lr_scheduler.step()
+
+        optimizer.zero_grad()
+
+    show_list.append(tmp)
+    
+```
+
+```python id="WfzlxDo7QLQW"
+show_list = torch.tensor(show_list).T
+```
+
+```python colab={"base_uri": "https://localhost:8080/"} id="JpPGA85MRJD3" outputId="7b996664-616c-4b6a-967b-b2941943fda6"
+lr_scheduler.state_dict()
+```
+
+```python colab={"base_uri": "https://localhost:8080/", "height": 301} id="o_zxpeIyS3oz" outputId="51f0458b-e84b-4662-bea3-e8e3a6e4a016"
 # Three settings of the lrate hyperparameters.
-opts = [NoamOpt(512, 1, 4000, None), 
-        NoamOpt(512, 1, 8000, None),
-        NoamOpt(256, 1, 4000, None)]
-plt.plot(torch.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
+
+plt.plot(np.arange(1, 20001),show_list)
 plt.legend(["512:4000", "512:8000", "256:4000"])
 plt.gca().set_xlabel("Step")
 plt.gca().set_ylabel("Learning Rate")
 None
 ```
 
-<!-- #region id="oRSyitmc17e1" -->
+<!-- #region id="7T1uD15VTsqK" -->
 ## Regularization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                                                                                                                                                                                                                                                                                                                       
 ### Label Smoothing
@@ -705,11 +718,11 @@ None
 During training, we employed label smoothing of value $\epsilon_{ls}=0.1$ [(cite)](https://arxiv.org/abs/1512.00567).  This hurts perplexity, as the model learns to be more unsure, but improves accuracy and BLEU score.  
 <!-- #endregion -->
 
-<!-- #region id="91r9KylU17e1" -->
+<!-- #region id="kNoAVD8bTsqK" -->
 > We implement label smoothing using the KL div loss. Instead of using a one-hot target distribution, we create a distribution that has `confidence` of the correct word and the rest of the `smoothing` mass distributed throughout the vocabulary.
 <!-- #endregion -->
 
-```python id="yVJb6W0l17e1"
+```python id="shU2GyiETsqK"
 class LabelSmoothing(nn.Module):
     "Implement label smoothing."
     def __init__(self, size, padding_idx, smoothing=0.0):
@@ -734,11 +747,11 @@ class LabelSmoothing(nn.Module):
         return self.criterion(x, true_dist.clone().detach())
 ```
 
-<!-- #region id="_n4uF68817e1" -->
+<!-- #region id="jCxUrlUyTsqK" -->
 > Here we can see an example of how the mass is distributed to the words based on confidence. 
 <!-- #endregion -->
 
-```python id="zaBrFy8M17e1"
+```python colab={"base_uri": "https://localhost:8080/", "height": 297} id="EZtKaaQNTsqK" outputId="8a2216e8-2ec4-402f-f32e-e6a6cc14250d"
 #Example of label smoothing.
 crit = LabelSmoothing(5, 0, 0.4)
 predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
@@ -752,11 +765,11 @@ v = crit(x=predict.log(), target=torch.LongTensor([2, 1, 0, 3, 3]))
 plt.imshow(crit.true_dist)
 ```
 
-<!-- #region id="7Qfr2fig17e1" -->
+<!-- #region id="CGM8J1veTsqK" -->
 > Label smoothing actually starts to penalize the model if it gets very confident about a given choice. 
 <!-- #endregion -->
 
-```python id="voJ0njYD17e1"
+```python colab={"base_uri": "https://localhost:8080/", "height": 279} id="78EHzLP7TsqK" outputId="fc465027-84dc-4456-d3f1-cf27aee63acb"
 crit = LabelSmoothing(5, 0, 0.1)
 def loss(x):
     d = x + 3 * 1
@@ -767,17 +780,17 @@ plt.plot(torch.arange(1, 100), [loss(x) for x in range(1, 100)])
 None
 ```
 
-<!-- #region id="I3WllMWg17e2" -->
+<!-- #region id="67lUqeLXTsqK" -->
 # A First  Example
 
 > We can begin by trying out a simple copy-task. Given a random set of input symbols from a small vocabulary, the goal is to generate back those same symbols. 
 <!-- #endregion -->
 
-<!-- #region id="tfmD5l0B17e2" -->
+<!-- #region id="jJa-89_pTsqK" -->
 ## Synthetic Data
 <!-- #endregion -->
 
-```python id="7tGLo31u17e2"
+```python id="g1aTxeqqTsqK"
 def data_gen(V, batch, nbatches):
     "Generate random data for a src-tgt copy task."
     for i in range(nbatches):
@@ -788,14 +801,37 @@ def data_gen(V, batch, nbatches):
         yield Batch(src, tgt, 0)
 ```
 
-<!-- #region id="G_yaxXLC17e2" -->
+<!-- #region id="XTXwD9hUTsqK" -->
 ## Loss Computation
 <!-- #endregion -->
 
-```python id="ggPtw69y17e2"
+```python id="D8hDdZ1vXiQm"
+from torch.optim import SGD
+from torch.optim.lr_scheduler import LambdaLR
+from torchvision.models import resnet18
+
+l5= []
+def poly_scheduler(epoch, num_epochs=300, power=0.9):
+    return (1 - epoch/num_epochs)**power
+
+
+model = resnet18()
+# optimizer = SGD(model.parameters(), lr=0.001)
+optimizer = torch.optim.Adam(model.parameters(), lr=1, betas=(0.9, 0.98), eps=1e-9)
+lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, model_size=512, factor=1, warmup=4000))
+
+
+for epoch in range(20000):
+    lr_scheduler.step(epoch)
+    l5.append(optimizer.param_groups[0]['lr'])
+    # print("learning rate: {:.6f}".format(optimizer.param_groups[0]['lr']))
+    optimizer.zero_grad()
+```
+
+```python id="3J8EJm87TsqK"
 class SimpleLossCompute:
     "A simple loss compute and train function."
-    def __init__(self, generator, criterion, opt=None):
+    def __init__(self, generator, criterion, opt=None, lr_scheduler=None):
         self.generator = generator
         self.criterion = criterion
         self.opt = opt
@@ -807,36 +843,44 @@ class SimpleLossCompute:
         loss.backward()
         if self.opt is not None:
             self.opt.step()
-            self.opt.optimizer.zero_grad()
+
+            self.opt.zero_grad()
+            lr_scheduler.step()
         return loss.data * norm
 ```
 
-<!-- #region id="adZ_VKct17e2" -->
+<!-- #region id="eDAI7ELUTsqL" -->
 ## Greedy Decoding
 <!-- #endregion -->
 
-```python id="jjjXQKC317e2"
+<!-- #region id="LFkWakplTsqL" -->
+> This code predicts a translation using greedy decoding for simplicity. 
+<!-- #endregion -->
+
+```python colab={"base_uri": "https://localhost:8080/"} id="qgIZ2yEtdYwe" outputId="26c61be4-b43d-4f2a-b480-29e66d24993d"
 # Train the simple copy task.
+
 V = 11
 criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
 model = make_model(V, V, N=2)
-model_opt = NoamOpt(model.src_embed[0].d_model, 1, 400,
-        torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+
+
+
+model_opt = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
+lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, model_size=model.src_embed[0].d_model, factor=1, warmup=400))
+
+
 
 for epoch in range(10):
     model.train()
     run_epoch(data_gen(V, 30, 20), model, 
-              SimpleLossCompute(model.generator, criterion, model_opt))
+              SimpleLossCompute(model.generator, criterion, model_opt, lr_scheduler))
     model.eval()
     print(run_epoch(data_gen(V, 30, 5), model, 
                     SimpleLossCompute(model.generator, criterion, None)))
 ```
 
-<!-- #region id="m9D4gcHu17e2" -->
-> This code predicts a translation using greedy decoding for simplicity. 
-<!-- #endregion -->
-
-```python id="fHMQMorM17e2"
+```python colab={"base_uri": "https://localhost:8080/"} id="N2UOpnT3bIyU" outputId="b57bd95e-7df1-4fd2-e309-eba736e68ec4"
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
@@ -858,24 +902,24 @@ src_mask = torch.ones(1, 1, 10)
 print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
 ```
 
-<!-- #region id="ViUYIb_417e2" -->
+<!-- #region id="OpuQv2GsTsqL" -->
 # A Real World Example
 
 > Now we consider a real-world example using the IWSLT German-English Translation task. This task is much smaller than the WMT task considered in the paper, but it illustrates the whole system. We also show how to use multi-gpu processing to make it really fast.
 <!-- #endregion -->
 
-```python tags=[] id="1_px0Qk117e2"
+```python tags=[] id="PnNSk_TSTsqL"
 #!pip install torchtext spacy
 #!python -m spacy download en
 #!python -m spacy download de
 ```
 
-<!-- #region tags=[] id="yE14WJKD17e2" -->
+<!-- #region tags=[] id="8y9dpfolTsqL" -->
 ## Data Loading
 > We will load the dataset using torchtext and spacy for tokenization. 
 <!-- #endregion -->
 
-```python tags=[] id="SgAg1vJ317e3"
+```python tags=[] id="t4BszXXJTsqL"
 from torchtext.vocab import build_vocab_from_iterator
 import torchtext.datasets as datasets
 import spacy
@@ -894,14 +938,14 @@ def yield_tokens(data_iter, tokenizer, index):
         yield tokenizer(from_to_tuple[index])
 ```
 
-```python tags=[] id="SddaZK2P17e3"
-print("Building German Vocabulary")
+```python tags=[] id="7fgr2wImTsqL"
+print("Building German Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=('de', 'en'))
 vocab_src = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_de, index=0),
                                      min_freq=2,
                                      specials=['<s>','</s>','<blank>','<unk>'])
 
-print("Building English Vocabulary")
+print("Building English Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=('de', 'en'))
 vocab_tgt = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_en, index=1),
                                      min_freq=2,
@@ -909,21 +953,25 @@ vocab_tgt = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_
 
 vocab_src.set_default_index(vocab_src["<unk>"])
 vocab_tgt.set_default_index(vocab_tgt["<unk>"])
+
+print("Finished. Vocabulary sizes are:")
+print(len(vocab_src))
+print(len(vocab_tgt))
 ```
 
-<!-- #region id="Q5pvtMZR17e3" -->
+<!-- #region id="-l-TFwzfTsqL" -->
 > Batching matters a ton for speed. We want to have very evenly divided batches, with absolutely minimal padding. To do this we have to hack a bit around the default torchtext batching. This code patches their default batching to make sure we search over enough sentences to find tight batches. 
 <!-- #endregion -->
 
-<!-- #region id="pvLqXqjj17e3" -->
+<!-- #region tags=[] jp-MarkdownHeadingCollapsed=true id="VT5bIPz-TsqL" -->
 ## Iterators
 <!-- #endregion -->
 
-```python id="sbOryxMA17e3"
+```python tags=[] id="L8S7glm6TsqL"
 from torch.utils.data import DataLoader
 from torch.nn.functional import pad
 
-def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab,max_padding=128,pad_id=0):
+def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab, device, max_padding=128, pad_id=0):
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
          processed_src = torch.tensor(src_vocab(src_pipeline(_src)), dtype=torch.int64)
@@ -935,27 +983,29 @@ def collate_batch(batch, src_pipeline, tgt_pipeline, src_vocab, tgt_vocab,max_pa
     tgt = torch.stack(tgt_list)
     return src.to(device), tgt.to(device)
 
-collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt)
+devices = range(torch.cuda.device_count()) # TODO - make this more general
+
+collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
 ```
 
-```python id="9LgMNda917e3"
-from torchtext.data.functional import to_map_style_dataset
-
-train_iter, val_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-
-train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
-                              shuffle=True, collate_fn=collate_fn)
+```python id="MUI1RNvvTsqM"
+def create_dataloaders(devices, batch_size=12000):
+    collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
+    train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
+    train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=batch_size,
+                                  shuffle=True, collate_fn=collate_fn)
+    valid_dataloader = DataLoader(to_map_style_dataset(valid_iter), batch_size=batch_size,
+                                  shuffle=True, collate_fn=collate_fn)
+    return train_dataloader, valid_dataloader
 ```
 
-```python id="DHHI4d_g17e3"
-# TODO: organize batches to minimize padding
-```
+<!-- #region id="SxudijeITsqM" -->
+Make an iterator out of the dataloader and test sampling one batch.
 
-```python id="K66kwE3J17e3"
-next(iter(train_dataloader))
-```
+TODO: still need to replicate MyIterator logic which construct batches grouping together text of similar length
+<!-- #endregion -->
 
-<!-- #region id="iI6plMCy17e4" -->
+<!-- #region tags=[] id="zP0dN6vqTsqM" -->
 ## Multi-GPU Training
 
 > Finally to really target fast training, we will use multi-gpu. This code implements multi-gpu word generation. It is not specific to transformer so I won't go into too much detail. The idea is to split up word generation at training time into chunks to be processed in parallel across many different gpus. We do this using pytorch parallel primitives:
@@ -968,11 +1018,11 @@ next(iter(train_dataloader))
 
 <!-- #endregion -->
 
-```python tags=[] id="ymljNci017e4"
+```python tags=[] id="EvDvTfXtTsqM"
 # Skip if not interested in multigpu.
 class MultiGPULossCompute:
     "A multi-gpu loss compute and train function."
-    def __init__(self, generator, criterion, devices, opt=None, chunk_size=5):
+    def __init__(self, generator, criterion, devices, opt=None, chunk_size=5, lr_scheduler=None)::
         # Send out to different gpus.
         self.generator = generator
         self.criterion = nn.parallel.replicate(criterion, 
@@ -1025,15 +1075,17 @@ class MultiGPULossCompute:
                                     target_device=self.devices[0])
             o1.backward(gradient=o2)
             self.opt.step()
-            self.opt.optimizer.zero_grad()
+
+            self.opt.zero_grad()
+            lr_scheduler.step()     
         return total * normalize
 ```
 
-<!-- #region id="0F9WApvt17e4" -->
+<!-- #region id="wUvWgHLFTsqM" -->
 > Now we create our model, criterion, optimizer, data iterators, and paralelization
 <!-- #endregion -->
 
-```python tags=[] id="vUM08j8d17e4"
+```python tags=[] id="4vF4f1RETsqM"
 # GPUs to use
 devices = range(torch.cuda.device_count())
 
@@ -1042,56 +1094,50 @@ model = make_model(len(vocab_src), len(vocab_tgt), N=6)
 model.cuda()
 criterion = LabelSmoothing(size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1)
 criterion.cuda()
+
 BATCH_SIZE = 12000
-    
-train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
-
-train_dataloader = DataLoader(to_map_style_dataset(train_iter), batch_size=12000,
-                              shuffle=True, collate_fn=collate_fn)
-
-valid_dataloader = DataLoader(to_map_style_dataset(valid_iter), batch_size=12000,
-                              shuffle=True, collate_fn=collate_fn)
-
-#    train_iter = MyIterator(trainDataset, batch_size=BATCH_SIZE, device=0,
-#                            repeat=False, sort_key=lambda x: (len(x[SOURCE]), len(x[TARGET])),
-#                            batch_size_fn=batch_size_fn, train=True)
-#    valid_iter = MyIterator(valDataset, batch_size=BATCH_SIZE, device=0,
-#                            repeat=False, sort_key=lambda x: (len(x[SOURCE]), len(x[TARGET])),
-#                            batch_size_fn=batch_size_fn, train=False)
+train_dataloader, valid_dataloader = create_dataloaders(devices, BATCH_SIZE)
 
 model_par = nn.DataParallel(model, device_ids=devices)
 ```
 
-<!-- #region id="RDyMULfC17e4" -->
+<!-- #region id="n-aVUlpjTsqM" -->
 > Now we train the model. I will play with the warmup steps a bit, but everything else uses the default parameters.  On an AWS p3.8xlarge with 4 Tesla V100s, this runs at ~27,000 tokens per second with a batch size of 12,000 
 <!-- #endregion -->
 
-<!-- #region id="i6sWYY_Y17e4" -->
+<!-- #region id="90qM8RzCTsqM" -->
 ## Training the System
 <!-- #endregion -->
 
-```python tags=[] id="vrohF6wM17e4"
+```python tags=[] id="Kx53VVTgTsqM"
 #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 ```
 
-```python id="YQR4ZHkL17e4"
+```python id="1AOrpAtHTsqM"
 # TODO ...
 ```
 
-```python id="0lyWWPeR17e5"
+```python id="2dubcnchTsqM"
+def rebatch(pad_idx, batch):
+    "Fix order in torchtext to match ours"
+    src, trg = batch[0], batch[1]
+    return Batch(src, trg, pad_idx)
+```
+
+```python id="jZeYHJcdTsqN"
 create_model = True
 
 if create_model:
-    model_opt = NoamOpt(model.src_embed[0].d_model, 1, 2000,
-            torch.optim.Adam(model.parameters(), lr=0, betas=(0.9, 0.98), eps=1e-9))
+    model_opt = torch.optim.Adam(model.parameters(), lr=1e-3, betas=(0.9, 0.98), eps=1e-9)
+    lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, model.parameters(), factor=1, warmup=2000))
     for epoch in range(10):
         model_par.train()
-        run_epoch((rebatch(pad_idx, b) for b in train_iter), 
+        run_epoch((rebatch(pad_idx, b) for b in train_dataloader), 
                   model_par, 
                   MultiGPULossCompute(model.generator, criterion, 
-                                      devices=devices, opt=model_opt))
+                                      devices=devices, opt=model_opt, lr_scheduler=lr_scheduler))
         model_par.eval()
-        loss = run_epoch((rebatch(pad_idx, b) for b in valid_iter), 
+        loss = run_epoch((rebatch(pad_idx, b) for b in valid_dataloader), 
                           model_par, 
                           MultiGPULossCompute(model.generator, criterion, 
                           devices=devices, opt=None))
@@ -1100,11 +1146,11 @@ else:
     model = torch.load("iwslt.pt")
 ```
 
-<!-- #region id="UHmRXwCL17e5" -->
+<!-- #region id="RZK_VjDPTsqN" -->
 > Once trained we can decode the model to produce a set of translations. Here we simply translate the first sentence in the validation set. This dataset is pretty small so the translations with greedy search are reasonably accurate. 
 <!-- #endregion -->
 
-```python id="PZbE23Tr17e5"
+```python id="f0mNHT4iTsqN"
 for i, batch in enumerate(valid_iter):
     src = batch.src.transpose(0, 1)[:1]
     src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
@@ -1125,52 +1171,52 @@ for i, batch in enumerate(valid_iter):
     break
 ```
 
-<!-- #region id="EgFCWHRx17e5" -->
+<!-- #region id="L50i0iEXTsqN" -->
 # Additional Components: BPE, Search, Averaging
 <!-- #endregion -->
 
-<!-- #region id="67rMWewr17e5" -->
+<!-- #region id="NBx1C2_NTsqN" -->
 > So this mostly covers the transformer model itself. There are four aspects that we didn't cover explicitly. We also have all these additional features implemented in [OpenNMT-py](https://github.com/opennmt/opennmt-py).
 
 
 <!-- #endregion -->
 
-<!-- #region id="fffwh7-d17e5" -->
+<!-- #region id="UpqV1mWnTsqN" -->
 > 1) BPE/ Word-piece: We can use a library to first preprocess the data into subword units. See Rico Sennrich's [subword-nmt](https://github.com/rsennrich/subword-nmt) implementation. These models will transform the training data to look like this:
 <!-- #endregion -->
 
-<!-- #region id="Z9ly690b17e5" -->
+<!-- #region id="hwJ_9J0BTsqN" -->
 ▁Die ▁Protokoll datei ▁kann ▁ heimlich ▁per ▁E - Mail ▁oder ▁FTP ▁an ▁einen ▁bestimmte n ▁Empfänger ▁gesendet ▁werden .
 <!-- #endregion -->
 
-<!-- #region id="lWA7L-fC17e5" -->
+<!-- #region id="9HwejYkpTsqN" -->
 > 2) Shared Embeddings: When using BPE with shared vocabulary we can share the same weight vectors between the source / target / generator. See the [(cite)](https://arxiv.org/abs/1608.05859) for details. To add this to the model simply do this:
 <!-- #endregion -->
 
-```python tags=[] id="4MYjzs2D17e5"
+```python tags=[] id="tb3j3CYLTsqN"
 if False:
     model.src_embed[0].lut.weight = model.tgt_embeddings[0].lut.weight
     model.generator.lut.weight = model.tgt_embed[0].lut.weight
 ```
 
-<!-- #region id="dje0uy4C17e5" -->
+<!-- #region id="xDKJsSwRTsqN" -->
 > 3) Beam Search: This is a bit too complicated to cover here. See the [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/blob/master/onmt/translate/Beam.py) for a pytorch implementation.
 
 
 <!-- #endregion -->
 
-<!-- #region id="mtikwJ7W17e6" -->
+<!-- #region id="wf3vVYGZTsqN" -->
 > 4) Model Averaging: The paper averages the last k checkpoints to create an ensembling effect. We can do this after the fact if we have a bunch of models:
 <!-- #endregion -->
 
-```python jupyter={"outputs_hidden": true} id="wX3-Oekg17e6"
+```python id="OpVO-QzfTsqO"
 def average(model, models):
     "Average models into model"
     for ps in zip(*[m.params() for m in [model] + models]):
         p[0].copy_(torch.sum(*ps[1:]) / len(ps[1:]))
 ```
 
-<!-- #region id="hAYt1OAX17e6" -->
+<!-- #region id="Kz5BYJ9sTsqO" -->
 # Results
 
 On the WMT 2014 English-to-German translation task, the big transformer model (Transformer (big)
@@ -1188,29 +1234,29 @@ dropout rate Pdrop = 0.1, instead of 0.3.
 
 <!-- #endregion -->
 
-```python id="NofjU_bv17e6"
+```python id="8qanbpQCTsqO"
 Image(filename="images/results.png")
 ```
 
-<!-- #region id="l5bGnNU717e6" -->
+<!-- #region id="cPcnsHvQTsqO" -->
 > The code we have written here is a version of the base model. There are fully trained version of this system available here  [(Example Models)](http://opennmt.net/Models-py/).
 >
 > With the addtional extensions in the last section, the OpenNMT-py replication gets to 26.9 on EN-DE WMT. Here I have loaded in those parameters to our reimplemenation. 
 <!-- #endregion -->
 
-```python jupyter={"outputs_hidden": true} id="IF8EpHBc17e6"
+```python id="lp9xvcjqTsqO"
 !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 ```
 
-```python jupyter={"outputs_hidden": true} id="8pMn6oYT17e6"
+```python id="uW-gDtRFTsqO"
 model, SRC, TGT = torch.load("en-de-model.pt")
 ```
 
-```python jupyter={"outputs_hidden": true} id="-mgOnFp_17e6"
+```python id="FpqzUW9OTsqO"
 
 ```
 
-```python id="L-bBk2mc17e6"
+```python id="Gh_uGlLBTsqO"
 model.eval()
 sent = "▁The ▁log ▁file ▁can ▁be ▁sent ▁secret ly ▁with ▁email ▁or ▁FTP ▁to ▁a ▁specified ▁receiver".split()
 src = torch.LongTensor([[SRC.stoi[w] for w in sent]])
@@ -1226,13 +1272,13 @@ for i in range(1, out.size(1)):
 print(trans)
 ```
 
-<!-- #region id="4Gxr7FhN17e6" -->
+<!-- #region id="0ZkkNTKLTsqO" -->
 ## Attention Visualization
 
 > Even with a greedy decoder the translation looks pretty good. We can further visualize it to see what is happening at each layer of the attention 
 <!-- #endregion -->
 
-```python id="CeW5XNBw17e7"
+```python id="DzwvonWjTsqO"
 tgt_sent = trans.split()
 def draw(data, x, y, ax):
     seaborn.heatmap(data, 
@@ -1263,7 +1309,7 @@ for layer in range(1, 6, 2):
 
 ```
 
-<!-- #region id="e9IXj8pA17e7" -->
+<!-- #region id="nSseuCcATsqO" -->
 # Conclusion
 
 > Hopefully this code is useful for future research. Please reach out if you have any issues. If you find this code helpful, also check out our other OpenNMT tools.
@@ -1287,7 +1333,7 @@ for layer in range(1, 6, 2):
 > srush
 <!-- #endregion -->
 
-<!-- #region id="NPLqCt-Z17e7" -->
+<!-- #region id="HsIh5RcVTsqP" -->
 {::options parse_block_html="true" /}
 <div id="disqus_thread"></div>
 <script>
@@ -1312,7 +1358,7 @@ s.setAttribute('data-timestamp', +new Date());
                             
 <!-- #endregion -->
 
-<!-- #region id="R2zhHYay17e7" -->
+<!-- #region id="GQlxG7lLTsqP" -->
 <div id="disqus_thread"></div>
 <script>
     /**
