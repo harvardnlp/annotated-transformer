@@ -45,15 +45,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math, copy, time
-import matplotlib.pyplot as plt
-import seaborn
-seaborn.set_context(context="talk")
+import pandas as pd
+import altair as alt
 from torchtext.data.functional import to_map_style_dataset
 import pdb
-
-
-
-%matplotlib inline
 ```
 
 <!-- #region -->
@@ -261,8 +256,19 @@ def subsequent_mask(size):
 > Below the attention mask shows the position each tgt word (row) is allowed to look at (column). Words are blocked for attending to future words during training.
 
 ```python
-plt.figure(figsize=(5,5))
-plt.imshow(subsequent_mask(20)[0])
+LS_data=pd.concat([pd.DataFrame({"Subsequent Mask":subsequent_mask(20)[0][x,y].flatten(),
+                              "Window":y,
+                              "Masking":x,})
+                for y in range(20)
+                for x in range(20)])
+
+
+alt.Chart(LS_data).mark_rect().properties(height=250,width=250).encode(
+    alt.X('Window:O'),
+    alt.Y('Masking:O'),
+    alt.Color('Subsequent Mask:Q', scale=alt.Scale(scheme='viridis'))
+)
+
 ```
 
 ### Attention                                                                                                                                                                                                                                                                             
@@ -437,11 +443,21 @@ class PositionalEncoding(nn.Module):
 > Below the positional encoding will add in a sine wave based on position. The frequency and offset of the wave is different for each dimension. 
 
 ```python
-plt.figure(figsize=(15, 5))
 pe = PositionalEncoding(20, 0)
 y = pe.forward(torch.zeros(1, 100, 20))
-plt.plot(torch.arange(100), y[0, :, 4:8])
-plt.legend(["dim %d"%p for p in [4,5,6,7]])
+
+data=pd.concat([pd.DataFrame({"embedding":y[0, :, dim],
+                              "dim":dim,
+                              "position":list(range(100))
+                              })
+                for dim in [4,5,6,7]])
+
+alt.Chart(data).mark_line().properties(width=600).encode(
+    x="position",
+    y='embedding',
+    color="dim:N"
+
+)
 ```
 
 We also experimented with using learned positional embeddings [(cite)](https://arxiv.org/pdf/1705.03122.pdf) instead, and found that the two versions produced nearly identical results.  We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.    
@@ -616,15 +632,37 @@ def get_std_opt(model):
 > Example of the curves of this model for different model sizes and for optimization hyperparameters. 
 
 ```python tags=[]
+## Enable altair to handle more than 5000 rows
+alt.data_transformers.disable_max_rows()
+
 # Three settings of the lrate hyperparameters.
 opts = [NoamOpt(512, 1, 4000, None), 
         NoamOpt(512, 1, 8000, None),
         NoamOpt(256, 1, 4000, None)]
-plt.plot(torch.arange(1, 20000), [[opt.rate(i) for opt in opts] for i in range(1, 20000)])
-plt.legend(["512:4000", "512:8000", "256:4000"])
-plt.gca().set_xlabel("Step")
-plt.gca().set_ylabel("Learning Rate")
-None
+
+
+opts = [NoamOpt(512, 1, 4000, None), 
+        NoamOpt(512, 1, 8000, None),
+        NoamOpt(256, 1, 4000, None)]
+
+opts=torch.tensor([[opt.rate(i) for opt in opts] for i in range(1, 20000)])
+
+opts_data=pd.concat([pd.DataFrame({"Learning Rate":opts[:,OptimSetup],
+                              "model_size:warmup":["512:4000", "512:8000", "256:4000"][OptimSetup],
+                              "step":list(range(20000-1))
+                              
+                              })
+                for OptimSetup in [0,1,2]])
+
+
+alt.Chart(opts_data).mark_line().properties(width=600).encode(
+    x="step",
+    y='Learning Rate',
+    color="model_size:warmup:N"
+
+)
+
+
 ```
 
 ## Regularization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
@@ -673,8 +711,18 @@ predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
                              [0, 0.2, 0.7, 0.1, 0]])
 v = crit(x=predict.log(), target=torch.LongTensor([2, 1, 0, 3, 3]))
 
-# Show the target distributions expected by the system.
-plt.imshow(crit.true_dist)
+LS_data=pd.concat([pd.DataFrame({"target distribution":crit.true_dist[x,y].flatten(),
+                              "columns":y,
+                              "rows":x,})
+                for y in range(5)
+                for x in range(5)])
+
+
+alt.Chart(LS_data).mark_rect(color='Blue',opacity=1).properties(height=200,width=200).encode(
+    alt.X('columns:O',title=None),
+    alt.Y('rows:O',title=None),
+    alt.Color('target distribution:Q', scale=alt.Scale(scheme='viridis'))
+)
 ```
 
 > Label smoothing actually starts to penalize the model if it gets very confident about a given choice. 
@@ -686,8 +734,16 @@ def loss(x):
     predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d],
                                  ])
     return crit(predict.log(), torch.LongTensor([1])).data
-plt.plot(torch.arange(1, 100), [loss(x) for x in range(1, 100)])
-None
+
+
+loss_data=pd.DataFrame({"Loss":[loss(x) for x in range(1, 100)],
+                        "steps":list(range(99))}).astype('float')
+
+alt.Chart(loss_data).mark_line().properties(width=350).encode(
+    x="steps",
+    y='Loss',
+
+)
 ```
 
 # A First  Example
@@ -971,7 +1027,7 @@ model_par = nn.DataParallel(model, device_ids=devices)
 ```
 
 ```python
-# TODO ...
+
 ```
 
 ```python
@@ -1119,34 +1175,59 @@ print(trans)
 > Even with a greedy decoder the translation looks pretty good. We can further visualize it to see what is happening at each layer of the attention 
 
 ```python
-tgt_sent = trans.split()
-def draw(data, x, y, ax):
-    seaborn.heatmap(data, 
-                    xticklabels=x, square=True, yticklabels=y, vmin=0.0, vmax=1.0, 
-                    cbar=False, ax=ax)
-    
-for layer in range(1, 6, 2):
-    fig, axs = plt.subplots(1,4, figsize=(20, 10))
-    print("Encoder Layer", layer+1)
-    for h in range(4):
-        draw(model.encoder.layers[layer].self_attn.attn[0, h].data, 
-            sent, sent if h ==0 else [], ax=axs[h])
-    plt.show()
-    
-for layer in range(1, 6, 2):
-    fig, axs = plt.subplots(1,4, figsize=(20, 10))
-    print("Decoder Self Layer", layer+1)
-    for h in range(4):
-        draw(model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(tgt_sent)], 
-            tgt_sent, tgt_sent if h ==0 else [], ax=axs[h])
-    plt.show()
-    print("Decoder Src Layer", layer+1)
-    fig, axs = plt.subplots(1,4, figsize=(20, 10))
-    for h in range(4):
-        draw(model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(sent)], 
-            sent, tgt_sent if h ==0 else [], ax=axs[h])
-    plt.show()
+Atten_data=pd.concat([pd.DataFrame({"Similarity_Layer1h0":model.encoder.layers[layer].self_attn.attn[0, h].data[x,y].flatten(),
+                                  "W1":y1,
+                                  "W2":x1,})
+                    for y,y1 in enumerate(sent)
+                    for x,x1 in enumerate(sent)])
 
+LayerNames=[]
+char=[]
+h_char=[]
+for layer in range(1, 6, 2):
+    for h in range(4):
+        Layer_name="Similarity_Layer"+ str(layer)+"h"+str(h)
+        Atten_data[Layer_name]=model.encoder.layers[layer].self_attn.attn[0, h].data.flatten()
+
+        base=alt.Chart(Atten_data).mark_rect(opacity=1).properties(height=150,width=150).encode(
+            alt.X('W2:N',sort=sent,title=None,),
+            alt.Y('W1:N',sort=sent,title=None),
+            alt.Color(Layer_name+':Q', scale=alt.Scale(scheme='darkred')),
+        )
+        char.append(base)
+    h_char.append(alt.hconcat(char[0],char[1],char[2],char[3],title='Encoder Layer'+str(layer+1)))
+    char=[]
+
+    
+alt.vconcat(h_char[0],h_char[1],h_char[2])
+```
+
+```python
+Atten_data=pd.concat([pd.DataFrame({"Similarity_Layer1h0":model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(tgt_sent)][x,y].flatten(),
+                                  "W1":y1,
+                                  "W2":x1,})
+                    for y,y1 in enumerate(sent)
+                    for x,x1 in enumerate(tgt_sent)])
+
+
+LayerNames=[]
+char=[]
+h_char=[]
+for layer in range(1, 6, 2):
+    for h in range(4):
+        Layer_name="Similarity_Layer"+ str(layer)+"h"+str(h)
+        Atten_data[Layer_name]=model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(sent)].flatten()
+        base=alt.Chart(Atten_data).mark_rect(opacity=1).properties(height=150,width=150).encode(
+            alt.X('W2:N',sort=sent,title=None,),
+            alt.Y('W1:N',sort=sent,title=None),
+            alt.Color(Layer_name+':Q', scale=alt.Scale(scheme='darkred')),
+        )
+        char.append(base)
+    h_char.append(alt.hconcat(char[0],char[1],char[2],char[3],title='Decoder Layer'+str(layer+1)))
+    char=[]
+
+    
+alt.vconcat(h_char[0],h_char[1],h_char[2])
 ```
 
 # Conclusion
