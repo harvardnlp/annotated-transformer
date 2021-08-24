@@ -455,9 +455,6 @@ def greedy_test():
     src_mask = torch.ones(1, 1, 10)
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
 
-spacy_de = spacy.load('de')
-spacy_en = spacy.load('en')
-
 def tokenize_de(text):
     return [tok.text for tok in spacy_de.tokenizer(text)]
 
@@ -692,6 +689,9 @@ def test_vis():
 
 if __name__ == "__main__":
 
+    spacy_de = spacy.load('de')
+    spacy_en = spacy.load('en')
+
     print("Building vocabulary")
     vocab_src, vocab_tgt = build_vocab()
 
@@ -704,4 +704,3 @@ if __name__ == "__main__":
     model, model_par, criterion = initialize_model(devices, vocab_src, vocab_tgt)
     print("Training model")
     train_model(model, model, criterion, pad_idx, train_dataloader, valid_dataloader)
-    None

@@ -33,7 +33,7 @@ Note this is merely a starting point for researchers and interested developers. 
 # Prelims
 
 ```python
-# !conda install -c pytorch torchtext spacy matplotlib seaborn numpy
+# !conda install -c pytorch torchtext spacy altair
 ```
 
 ```python tags=[]
@@ -256,19 +256,17 @@ def subsequent_mask(size):
 > Below the attention mask shows the position each tgt word (row) is allowed to look at (column). Words are blocked for attending to future words during training.
 
 ```python
-LS_data=pd.concat([pd.DataFrame({"Subsequent Mask":subsequent_mask(20)[0][x,y].flatten(),
+LS_data = pd.concat([pd.DataFrame({"Subsequent Mask":subsequent_mask(20)[0][x,y].flatten(),
                               "Window":y,
                               "Masking":x,})
-                for y in range(20)
-                for x in range(20)])
-
+                    for y in range(20)
+                    for x in range(20)])
 
 alt.Chart(LS_data).mark_rect().properties(height=250,width=250).encode(
     alt.X('Window:O'),
     alt.Y('Masking:O'),
     alt.Color('Subsequent Mask:Q', scale=alt.Scale(scheme='viridis'))
 )
-
 ```
 
 ### Attention                                                                                                                                                                                                                                                                             
@@ -446,18 +444,16 @@ class PositionalEncoding(nn.Module):
 pe = PositionalEncoding(20, 0)
 y = pe.forward(torch.zeros(1, 100, 20))
 
-data=pd.concat([pd.DataFrame({"embedding":y[0, :, dim],
+data = pd.concat([pd.DataFrame({"embedding":y[0, :, dim],
                               "dim":dim,
                               "position":list(range(100))
                               })
-                for dim in [4,5,6,7]])
+                    for dim in [4,5,6,7]])
 
 alt.Chart(data).mark_line().properties(width=600).encode(
     x="position",
     y='embedding',
-    color="dim:N"
-
-)
+    color="dim:N")
 ```
 
 We also experimented with using learned positional embeddings [(cite)](https://arxiv.org/pdf/1705.03122.pdf) instead, and found that the two versions produced nearly identical results.  We chose the sinusoidal version because it may allow the model to extrapolate to sequence lengths longer than the ones encountered during training.    
@@ -640,7 +636,6 @@ opts = [NoamOpt(512, 1, 4000, None),
         NoamOpt(512, 1, 8000, None),
         NoamOpt(256, 1, 4000, None)]
 
-
 opts = [NoamOpt(512, 1, 4000, None), 
         NoamOpt(512, 1, 8000, None),
         NoamOpt(256, 1, 4000, None)]
@@ -654,15 +649,11 @@ opts_data=pd.concat([pd.DataFrame({"Learning Rate":opts[:,OptimSetup],
                               })
                 for OptimSetup in [0,1,2]])
 
-
 alt.Chart(opts_data).mark_line().properties(width=600).encode(
     x="step",
     y='Learning Rate',
     color="model_size:warmup:N"
-
 )
-
-
 ```
 
 ## Regularization                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
