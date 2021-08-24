@@ -91,7 +91,7 @@ Most competitive neural sequence transduction models have an encoder-decoder str
 ```python id="k0XGXhzRTsqB"
 class EncoderDecoder(nn.Module):
     """
-    A standard Encoder-Decoder architecture. Base for this and many 
+    A standard Encoder-Decoder architecture. Base for this and many
     other models.
     """
     def __init__(self, encoder, decoder, src_embed, tgt_embed, generator):
@@ -101,15 +101,14 @@ class EncoderDecoder(nn.Module):
         self.src_embed = src_embed
         self.tgt_embed = tgt_embed
         self.generator = generator
-        
+
     def forward(self, src, tgt, src_mask, tgt_mask):
         "Take in and process masked src and target sequences."
-        return self.decode(self.encode(src, src_mask), src_mask,
-                            tgt, tgt_mask)
-    
+        return self.decode(self.encode(src, src_mask), src_mask, tgt, tgt_mask)
+
     def encode(self, src, src_mask):
         return self.encoder(self.src_embed(src), src_mask)
-    
+
     def decode(self, memory, src_mask, tgt, tgt_mask):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
 ```
@@ -154,7 +153,7 @@ class Encoder(nn.Module):
         super(Encoder, self).__init__()
         self.layers = clones(layer, N)
         self.norm = LayerNorm(layer.size)
-        
+
     def forward(self, x, mask):
         "Pass the input (and mask) through each layer in turn."
         for layer in self.layers:
@@ -237,7 +236,7 @@ class Decoder(nn.Module):
         super(Decoder, self).__init__()
         self.layers = clones(layer, N)
         self.norm = LayerNorm(layer.size)
-        
+
     def forward(self, x, memory, src_mask, tgt_mask):
         for layer in self.layers:
             x = layer(x, memory, src_mask, tgt_mask)
@@ -258,7 +257,7 @@ class DecoderLayer(nn.Module):
         self.src_attn = src_attn
         self.feed_forward = feed_forward
         self.sublayer = clones(SublayerConnection(size, dropout), 3)
- 
+
     def forward(self, x, memory, src_mask, tgt_mask):
         "Follow Figure 1 (right) for connections."
         m = memory
@@ -275,7 +274,8 @@ We also modify the self-attention sub-layer in the decoder stack to prevent posi
 def subsequent_mask(size):
     "Mask out subsequent positions."
     attn_shape = (1, size, size)
-    subsequent_mask = torch.triu(torch.ones(attn_shape), diagonal=1).type(torch.uint8)
+    subsequent_mask = torch.triu(torch.ones(attn_shape),
+                                 diagonal=1).type(torch.uint8)
     return subsequent_mask == 0
 ```
 
@@ -286,11 +286,11 @@ def subsequent_mask(size):
 ```python id="ht_FtgYAokC4"
 LS_data = pd.concat([pd.DataFrame({"Subsequent Mask":subsequent_mask(20)[0][x,y].flatten(),
                               "Window":y,
-                              "Masking":x,})
+                              "Masking":x})
                     for y in range(20)
                     for x in range(20)])
 
-alt.Chart(LS_data).mark_rect().properties(height=250,width=250).encode(
+alt.Chart(LS_data).mark_rect().properties(height=250, width=250).encode(
     alt.X('Window:O'),
     alt.Y('Masking:O'),
     alt.Color('Subsequent Mask:Q', scale=alt.Scale(scheme='viridis'))
@@ -322,11 +322,10 @@ $$
 def attention(query, key, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
-    scores = torch.matmul(query, key.transpose(-2, -1)) \
-             / math.sqrt(d_k)
+    scores = torch.matmul(query, key.transpose(-2, -1))/math.sqrt(d_k)
     if mask is not None:
         scores = scores.masked_fill(mask == 0, -1e9)
-    p_attn = F.softmax(scores, dim = -1)
+    p_attn = F.softmax(scores, dim=-1)
     if dropout is not None:
         p_attn = dropout(p_attn)
     return torch.matmul(p_attn, value), p_attn
@@ -369,24 +368,24 @@ class MultiHeadedAttention(nn.Module):
         self.linears = clones(nn.Linear(d_model, d_model), 4)
         self.attn = None
         self.dropout = nn.Dropout(p=dropout)
-        
+
     def forward(self, query, key, value, mask=None):
         "Implements Figure 2"
         if mask is not None:
             # Same mask applied to all h heads.
             mask = mask.unsqueeze(1)
         nbatches = query.size(0)
-        
-        # 1) Do all the linear projections in batch from d_model => h x d_k 
+
+        # 1) Do all the linear projections in batch from d_model => h x d_k
         query, key, value = \
             [l(x).view(nbatches, -1, self.h, self.d_k).transpose(1, 2)
              for l, x in zip(self.linears, (query, key, value))]
-        
-        # 2) Apply attention on all the projected vectors in batch. 
-        x, self.attn = attention(query, key, value, mask=mask, 
+
+        # 2) Apply attention on all the projected vectors in batch.
+        x, self.attn = attention(query, key, value, mask=mask,
                                  dropout=self.dropout)
-        
-        # 3) "Concat" using a view and apply a final linear. 
+
+        # 3) "Concat" using a view and apply a final linear.
         x = x.transpose(1, 2).contiguous() \
              .view(nbatches, -1, self.h * self.d_k)
         return self.linears[-1](x)
@@ -464,7 +463,7 @@ class PositionalEncoding(nn.Module):
     def __init__(self, d_model, dropout, max_len=5000):
         super(PositionalEncoding, self).__init__()
         self.dropout = nn.Dropout(p=dropout)
-        
+
         # Compute the positional encodings once in log space.
         pe = torch.zeros(max_len, d_model)
         position = torch.arange(0, max_len).unsqueeze(1)
@@ -474,9 +473,9 @@ class PositionalEncoding(nn.Module):
         pe[:, 1::2] = torch.cos(position * div_term)
         pe = pe.unsqueeze(0)
         self.register_buffer('pe', pe)
-        
+
     def forward(self, x):
-        x = x + self.pe[:,:x.size(1)].requires_grad_(False)
+        x = x + self.pe[:, :x.size(1)].requires_grad_(False)
         return self.dropout(x)
 ```
 
@@ -492,7 +491,7 @@ data = pd.concat([pd.DataFrame({"embedding":y[0, :, dim],
                               "dim":dim,
                               "position":list(range(100))
                               })
-                    for dim in [4,5,6,7]])
+                    for dim in [4, 5, 6, 7]])
 
 alt.Chart(data).mark_line().properties(width=600).encode(
     x="position",
@@ -511,7 +510,7 @@ We also experimented with using learned positional embeddings [(cite)](https://a
 <!-- #endregion -->
 
 ```python id="mPe1ES0UTsqI"
-def make_model(src_vocab, tgt_vocab, N=6, 
+def make_model(src_vocab, tgt_vocab, N=6,
                d_model=512, d_ff=2048, h=8, dropout=0.1):
     "Helper: Construct a model from hyperparameters."
     c = copy.deepcopy
@@ -520,13 +519,13 @@ def make_model(src_vocab, tgt_vocab, N=6,
     position = PositionalEncoding(d_model, dropout)
     model = EncoderDecoder(
         Encoder(EncoderLayer(d_model, c(attn), c(ff), dropout), N),
-        Decoder(DecoderLayer(d_model, c(attn), c(attn), 
+        Decoder(DecoderLayer(d_model, c(attn), c(attn),
                              c(ff), dropout), N),
         nn.Sequential(Embeddings(d_model, src_vocab), c(position)),
         nn.Sequential(Embeddings(d_model, tgt_vocab), c(position)),
         Generator(d_model, tgt_vocab))
-    
-    # This was important from their code. 
+
+    # This was important from their code.
     # Initialize parameters with Glorot / fan_avg.
     for p in model.parameters():
         if p.dim() > 1:
@@ -566,7 +565,7 @@ class Batch:
             self.trg_mask = \
                 self.make_std_mask(self.trg, pad)
             self.ntokens = (self.trg_y != pad).data.sum()
-    
+
     @staticmethod
     def make_std_mask(tgt, pad):
         "Create a mask to hide padding and future words."
@@ -591,7 +590,7 @@ def run_epoch(data_iter, model, loss_compute):
     total_loss = 0
     tokens = 0
     for i, batch in enumerate(data_iter):
-        out = model.forward(batch.src, batch.trg, 
+        out = model.forward(batch.src, batch.trg,
                             batch.src_mask, batch.trg_mask)
         loss = loss_compute(out, batch.trg_y, batch.ntokens)
         total_loss += loss
@@ -600,7 +599,7 @@ def run_epoch(data_iter, model, loss_compute):
         if i % 50 == 1:
             elapsed = time.time() - start
             print("Epoch Step: %d Loss: %f Tokens per Sec: %f" %
-                    (i, loss / batch.ntokens, tokens / elapsed))
+                  (i, loss / batch.ntokens, tokens / elapsed))
             start = time.time()
             tokens = 0
     return total_loss / total_tokens
@@ -621,8 +620,12 @@ Sentence pairs were batched together by approximate sequence length.  Each train
 
 ```python id="AdVWZ0Q2okC7"
 global max_src_in_batch, max_tgt_in_batch
+
+
 def batch_size_fn(new, count, sofar):
+
     "Keep augmenting batch and calculate total number of tokens + padding."
+
     global max_src_in_batch, max_tgt_in_batch
     if count == 1:
         max_src_in_batch = 0
@@ -661,19 +664,22 @@ This corresponds to increasing the learning rate linearly for the first $warmup\
 
 ```python id="zUz3PdAnVg4o"
 def rate(step, model_size, factor, warmup):
-    # we have to default the step to 1 for LambdaLR function to avoid zero raising to negative power.
+    """
+    we have to default the step to 1 for LambdaLR function
+    to avoid zero raising to negative power.
+    """
     if step == 0:
-       step = 1                   
+        step = 1
     return factor * \
         (model_size ** (-0.5) *
-        min(step ** (-0.5), step * warmup ** (-1.5)))
+         min(step ** (-0.5), step * warmup ** (-1.5)))
 ```
 
 ```python id="l1bnrlnSV8J5"
-        #model_size, factor, warmup
-opts = [[512,        1,      4000],           #example 1
-        [512,        1,      8000],           #example 2
-        [256,        1,      4000]]           #example 3
+# model_size, factor, warmup
+opts = [[512,        1,      4000],           # example 1
+        [512,        1,      8000],           # example 2
+        [256,        1,      4000]]           # example 3
 ```
 
 ```python id="H9Z0h9bXM8f9"
@@ -688,13 +694,15 @@ from torch.optim.lr_scheduler import LambdaLR
 # we have 3 examples in opts list.
 for example in opts:
     # run 20000 epoch for each example
-    optimizer = torch.optim.Adam(dummy_model.parameters(), lr=1, betas=(0.9, 0.98), eps=1e-9)
-    lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, *example))
+    optimizer = torch.optim.Adam(dummy_model.parameters(),
+                                 lr=1, betas=(0.9, 0.98), eps=1e-9)
+    lr_scheduler = LambdaLR(optimizer=optimizer,
+                            lr_lambda=lambda step : rate(step, *example))
     tmp = []
     for epoch in range(20000):
 
         tmp.append(optimizer.param_groups[0]['lr'])
-        
+
         optimizer.step()
 
         lr_scheduler.step()
@@ -702,7 +710,6 @@ for example in opts:
         optimizer.zero_grad()
 
     show_list.append(tmp)
-    
 ```
 
 ```python id="WfzlxDo7QLQW"
@@ -723,23 +730,12 @@ lr_scheduler.state_dict()
 ## Enable altair to handle more than 5000 rows
 alt.data_transformers.disable_max_rows()
 
-# Three settings of the lrate hyperparameters.
-opts = [NoamOpt(512, 1, 4000, None), 
-        NoamOpt(512, 1, 8000, None),
-        NoamOpt(256, 1, 4000, None)]
-
-opts = [NoamOpt(512, 1, 4000, None), 
-        NoamOpt(512, 1, 8000, None),
-        NoamOpt(256, 1, 4000, None)]
-
-opts=torch.tensor([[opt.rate(i) for opt in opts] for i in range(1, 20000)])
-
-opts_data=pd.concat([pd.DataFrame({"Learning Rate":opts[:,OptimSetup],
-                              "model_size:warmup":["512:4000", "512:8000", "256:4000"][OptimSetup],
-                              "step":list(range(20000-1))
-                              
-                              })
-                for OptimSetup in [0,1,2]])
+opts_data = pd.concat([pd.DataFrame({"Learning Rate": show_list[:, OptimSetup],
+                                     "model_size:warmup":["512:4000",
+                                                          "512:8000",
+                                                          "256:4000"][OptimSetup],
+                                     "step":list(range(20000))})
+                       for OptimSetup in [0, 1, 2]])
 
 alt.Chart(opts_data).mark_line().properties(width=600).encode(
     x="step",
@@ -771,7 +767,7 @@ class LabelSmoothing(nn.Module):
         self.smoothing = smoothing
         self.size = size
         self.true_dist = None
-        
+
     def forward(self, x, target):
         assert x.size(1) == self.size
         true_dist = x.data.clone()
@@ -793,13 +789,13 @@ class LabelSmoothing(nn.Module):
 #Example of label smoothing.
 crit = LabelSmoothing(5, 0, 0.4)
 predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
-                             [0, 0.2, 0.7, 0.1, 0], 
-                             [0, 0.2, 0.7, 0.1, 0], 
-                             [0, 0.2, 0.7, 0.1, 0], 
+                             [0, 0.2, 0.7, 0.1, 0],
+                             [0, 0.2, 0.7, 0.1, 0],
+                             [0, 0.2, 0.7, 0.1, 0],
                              [0, 0.2, 0.7, 0.1, 0]])
 v = crit(x=predict.log(), target=torch.LongTensor([2, 1, 0, 3, 3]))
 
-LS_data=pd.concat([pd.DataFrame({"target distribution":crit.true_dist[x,y].flatten(),
+LS_data = pd.concat([pd.DataFrame({"target distribution":crit.true_dist[x,y].flatten(),
                               "columns":y,
                               "rows":x,})
                 for y in range(5)
@@ -819,20 +815,22 @@ alt.Chart(LS_data).mark_rect(color='Blue',opacity=1).properties(height=200,width
 
 ```python id="78EHzLP7TsqK"
 crit = LabelSmoothing(5, 0, 0.1)
+
+
 def loss(x):
+
     d = x + 3 * 1
     predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d],
                                  ])
     return crit(predict.log(), torch.LongTensor([1])).data
 
 
-loss_data=pd.DataFrame({"Loss":[loss(x) for x in range(1, 100)],
+loss_data = pd.DataFrame({"Loss":[loss(x) for x in range(1, 100)],
                         "steps":list(range(99))}).astype('float')
 
 alt.Chart(loss_data).mark_line().properties(width=350).encode(
     x="steps",
     y='Loss',
-
 )
 ```
 
@@ -868,7 +866,7 @@ class SimpleLossCompute:
         self.generator = generator
         self.criterion = criterion
         self.opt = opt
-        
+
     def __call__(self, x, y, norm):
         x = self.generator(x)
         loss = self.criterion(x.contiguous().view(-1, x.size(-1)), 
@@ -897,12 +895,9 @@ V = 11
 criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
 model = make_model(V, V, N=2)
 
-
-
-model_opt = torch.optim.Adam(model.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
-lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, model_size=model.src_embed[0].d_model, factor=1, warmup=400))
-
-
+model_opt = torch.optim.Adam(model.parameters(),
+                             lr=1e-4, betas=(0.9, 0.98), eps=1e-9)
+lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda=lambda step : rate(step, model_size=model.src_embed[0].d_model, factor=1, warmup=400))
 
 for epoch in range(10):
     model.train()
@@ -918,19 +913,21 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
     for i in range(max_len-1):
-        out = model.decode(memory, src_mask, 
-                           ys, 
+        out = model.decode(memory, src_mask,
+                           ys,
                            subsequent_mask(ys.size(1))
-                                    .type_as(src.data))
+                           .type_as(src.data))
         prob = model.generator(out[:, -1])
-        _, next_word = torch.max(prob, dim = 1)
+        _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
-        ys = torch.cat([ys, 
-                        torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1)
+        ys = torch.cat([ys,
+                        torch.ones(1, 1).type_as(src.data)
+                        .fill_(next_word)], dim=1)
     return ys
 
+
 model.eval()
-src = torch.LongTensor([[1,2,3,4,5,6,7,8,9,10]])
+src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
 src_mask = torch.ones(1, 1, 10)
 print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
 ```
