@@ -283,7 +283,7 @@ def subsequent_mask(size):
 > Below the attention mask shows the position each tgt word (row) is allowed to look at (column). Words are blocked for attending to future words during training.
 <!-- #endregion -->
 
-```python id="g8GHIhMZl0UW"
+```python id="ht_FtgYAokC4"
 LS_data = pd.concat([pd.DataFrame({"Subsequent Mask":subsequent_mask(20)[0][x,y].flatten(),
                               "Window":y,
                               "Masking":x,})
@@ -484,7 +484,7 @@ class PositionalEncoding(nn.Module):
 > Below the positional encoding will add in a sine wave based on position. The frequency and offset of the wave is different for each dimension. 
 <!-- #endregion -->
 
-```python id="t3zZEHcql0UX"
+```python id="rnvHk_1QokC6"
 pe = PositionalEncoding(20, 0)
 y = pe.forward(torch.zeros(1, 100, 20))
 
@@ -619,7 +619,7 @@ Sentence pairs were batched together by approximate sequence length.  Each train
 > We will use torch text for batching. This is discussed in more detail below. Here we create batches in a torchtext function that ensures our batch size padded to the maximum batchsize does not surpass a threshold (25000 if we have 8 gpus).
 <!-- #endregion -->
 
-```python id="2R2InX81l0UZ"
+```python id="AdVWZ0Q2okC7"
 global max_src_in_batch, max_tgt_in_batch
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -714,7 +714,7 @@ lr_scheduler.state_dict()
 ```
 
 
-```python tags=[] id="QyLuHDFCl0Ua"
+```python tags=[] id="eBUyjZJjokC8"
 # plt.plot(np.arange(1, 20001),show_list)
 # plt.legend(["512:4000", "512:8000", "256:4000"])
 # plt.gca().set_xlabel("Step")
@@ -971,7 +971,7 @@ def yield_tokens(data_iter, tokenizer, index):
         yield tokenizer(from_to_tuple[index])
 ```
 
-```python tags=[] id="GogOSS-gl0Uc"
+```python tags=[] id="jU3kVlV5okC-"
 print("Building German Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=('de', 'en'))
 vocab_src = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_de, index=0),
@@ -996,11 +996,11 @@ print(len(vocab_tgt))
 > Batching matters a ton for speed. We want to have very evenly divided batches, with absolutely minimal padding. To do this we have to hack a bit around the default torchtext batching. This code patches their default batching to make sure we search over enough sentences to find tight batches. 
 <!-- #endregion -->
 
-<!-- #region tags=[] jp-MarkdownHeadingCollapsed=true id="rO0ODNCAl0Uc" -->
+<!-- #region tags=[] jp-MarkdownHeadingCollapsed=true id="kDEj-hCgokC-" -->
 ## Iterators
 <!-- #endregion -->
 
-```python tags=[] id="Lu6cn0tpl0Uc"
+```python tags=[] id="wGsIHFgOokC_"
 from torch.utils.data import DataLoader
 from torch.nn.functional import pad
 
@@ -1021,7 +1021,7 @@ devices = range(torch.cuda.device_count()) # TODO - make this more general
 collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
 ```
 
-```python id="_45-h2n4l0Uc"
+```python id="ka2Ce_WIokC_"
 def create_dataloaders(devices, batch_size=12000):
     collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
@@ -1032,13 +1032,13 @@ def create_dataloaders(devices, batch_size=12000):
     return train_dataloader, valid_dataloader
 ```
 
-<!-- #region id="rAeOKhCcl0Uc" -->
+<!-- #region id="SZpuTTK1okC_" -->
 Make an iterator out of the dataloader and test sampling one batch.
 
 TODO: still need to replicate MyIterator logic which construct batches grouping together text of similar length
 <!-- #endregion -->
 
-<!-- #region tags=[] id="dcZB2k1Rl0Uc" -->
+<!-- #region tags=[] id="p9K8Ck3ookC_" -->
 ## Multi-GPU Training
 
 > Finally to really target fast training, we will use multi-gpu. This code implements multi-gpu word generation. It is not specific to transformer so I won't go into too much detail. The idea is to split up word generation at training time into chunks to be processed in parallel across many different gpus. We do this using pytorch parallel primitives:
@@ -1146,7 +1146,7 @@ model_par = nn.DataParallel(model, device_ids=devices)
 #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 ```
 
-```python id="iHXupkEjl0Ud"
+```python id="9hR8Rvx-okDA"
 def rebatch(pad_idx, batch):
     "Fix order in torchtext to match ours"
     src, trg = batch[0], batch[1]
@@ -1247,7 +1247,7 @@ if False:
 > 4) Model Averaging: The paper averages the last k checkpoints to create an ensembling effect. We can do this after the fact if we have a bunch of models:
 <!-- #endregion -->
 
-```python id="-jJvOqSal0Ue"
+```python id="hAFEa78JokDB"
 def average(model, models):
     "Average models into model"
     for ps in zip(*[m.params() for m in [model] + models]):
@@ -1282,11 +1282,11 @@ Image(filename="images/results.png")
 > With the addtional extensions in the last section, the OpenNMT-py replication gets to 26.9 on EN-DE WMT. Here I have loaded in those parameters to our reimplemenation. 
 <!-- #endregion -->
 
-```python id="-LYQ8fg7l0Uf"
+```python id="LHLDc7enokDB"
 !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 ```
 
-```python id="5_Cro0dVl0Uf"
+```python id="Y37eUkL-okDB"
 model, SRC, TGT = torch.load("en-de-model.pt")
 ```
 
@@ -1312,7 +1312,7 @@ print(trans)
 > Even with a greedy decoder the translation looks pretty good. We can further visualize it to see what is happening at each layer of the attention 
 <!-- #endregion -->
 
-```python id="T51ySP-Nl0Uf"
+```python id="6aS3Be3jokDB"
 # tgt_sent = trans.split()
 # def draw(data, x, y, ax):
 #    seaborn.heatmap(data, 
@@ -1346,7 +1346,7 @@ for layer in range(1, 6, 2):
 alt.vconcat(h_char[0],h_char[1],h_char[2])
 ```
 
-```python id="nW9WWHK7l0Uf"
+```python id="17lYaiKDokDC"
 Atten_data=pd.concat([pd.DataFrame({"Similarity_Layer1h0":model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(tgt_sent)][x,y].flatten(),
                                   "W1":y1,
                                   "W2":x1,})
