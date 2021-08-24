@@ -39,7 +39,7 @@ Note this is merely a starting point for researchers and interested developers. 
 # !conda install -c pytorch torchtext spacy altair
 ```
 
-```python tags=[] id="hin0sxaITsp9"
+```python id="hin0sxaITsp9" tags=[]
 # !pip install http://download.pytorch.org/whl/cu80/torch-0.3.0.post4-cp36-cp36m-linux_x86_64.whl numpy matplotlib spacy torchtext seaborn 
 ```
 
@@ -283,7 +283,7 @@ def subsequent_mask(size):
 > Below the attention mask shows the position each tgt word (row) is allowed to look at (column). Words are blocked for attending to future words during training.
 <!-- #endregion -->
 
-```python
+```python id="g8GHIhMZl0UW"
 LS_data = pd.concat([pd.DataFrame({"Subsequent Mask":subsequent_mask(20)[0][x,y].flatten(),
                               "Window":y,
                               "Masking":x,})
@@ -484,7 +484,7 @@ class PositionalEncoding(nn.Module):
 > Below the positional encoding will add in a sine wave based on position. The frequency and offset of the wave is different for each dimension. 
 <!-- #endregion -->
 
-```python
+```python id="t3zZEHcql0UX"
 pe = PositionalEncoding(20, 0)
 y = pe.forward(torch.zeros(1, 100, 20))
 
@@ -619,7 +619,7 @@ Sentence pairs were batched together by approximate sequence length.  Each train
 > We will use torch text for batching. This is discussed in more detail below. Here we create batches in a torchtext function that ensures our batch size padded to the maximum batchsize does not surpass a threshold (25000 if we have 8 gpus).
 <!-- #endregion -->
 
-```python
+```python id="2R2InX81l0UZ"
 global max_src_in_batch, max_tgt_in_batch
 def batch_size_fn(new, count, sofar):
     "Keep augmenting batch and calculate total number of tokens + padding."
@@ -634,7 +634,7 @@ def batch_size_fn(new, count, sofar):
     return max(src_elements, tgt_elements)
 ```
 
-<!-- #region jp-MarkdownHeadingCollapsed=true tags=[] id="F1mTQatiTsqJ" -->
+<!-- #region id="F1mTQatiTsqJ" jp-MarkdownHeadingCollapsed=true tags=[] -->
 ## Hardware and Schedule                                                                                                                                                                                                   
 We trained our models on one machine with 8 NVIDIA P100 GPUs.  For our base models using the hyperparameters described throughout the paper, each training step took about 0.4 seconds.  We trained the base models for a total of 100,000 steps or 12 hours. For our big models, step time was 1.0 seconds.  The big models were trained for 300,000 steps (3.5 days).
 <!-- #endregion -->
@@ -709,12 +709,12 @@ for example in opts:
 show_list = torch.tensor(show_list).T
 ```
 
-```python colab={"base_uri": "https://localhost:8080/"} id="JpPGA85MRJD3" outputId="7b996664-616c-4b6a-967b-b2941943fda6"
+```python id="JpPGA85MRJD3"
 lr_scheduler.state_dict()
 ```
 
 
-```python tags=[]
+```python tags=[] id="QyLuHDFCl0Ua"
 # plt.plot(np.arange(1, 20001),show_list)
 # plt.legend(["512:4000", "512:8000", "256:4000"])
 # plt.gca().set_xlabel("Step")
@@ -789,7 +789,7 @@ class LabelSmoothing(nn.Module):
 > Here we can see an example of how the mass is distributed to the words based on confidence. 
 <!-- #endregion -->
 
-```python colab={"base_uri": "https://localhost:8080/", "height": 297} id="EZtKaaQNTsqK" outputId="8a2216e8-2ec4-402f-f32e-e6a6cc14250d"
+```python id="EZtKaaQNTsqK"
 #Example of label smoothing.
 crit = LabelSmoothing(5, 0, 0.4)
 predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
@@ -817,7 +817,7 @@ alt.Chart(LS_data).mark_rect(color='Blue',opacity=1).properties(height=200,width
 > Label smoothing actually starts to penalize the model if it gets very confident about a given choice. 
 <!-- #endregion -->
 
-```python colab={"base_uri": "https://localhost:8080/", "height": 279} id="78EHzLP7TsqK" outputId="fc465027-84dc-4456-d3f1-cf27aee63acb"
+```python id="78EHzLP7TsqK"
 crit = LabelSmoothing(5, 0, 0.1)
 def loss(x):
     d = x + 3 * 1
@@ -861,29 +861,6 @@ def data_gen(V, batch, nbatches):
 ## Loss Computation
 <!-- #endregion -->
 
-```python id="D8hDdZ1vXiQm"
-from torch.optim import SGD
-from torch.optim.lr_scheduler import LambdaLR
-from torchvision.models import resnet18
-
-l5= []
-def poly_scheduler(epoch, num_epochs=300, power=0.9):
-    return (1 - epoch/num_epochs)**power
-
-
-model = resnet18()
-# optimizer = SGD(model.parameters(), lr=0.001)
-optimizer = torch.optim.Adam(model.parameters(), lr=1, betas=(0.9, 0.98), eps=1e-9)
-lr_scheduler = LambdaLR(optimizer=optimizer, lr_lambda = lambda step : rate(step, model_size=512, factor=1, warmup=4000))
-
-
-for epoch in range(20000):
-    lr_scheduler.step(epoch)
-    l5.append(optimizer.param_groups[0]['lr'])
-    # print("learning rate: {:.6f}".format(optimizer.param_groups[0]['lr']))
-    optimizer.zero_grad()
-```
-
 ```python id="3J8EJm87TsqK"
 class SimpleLossCompute:
     "A simple loss compute and train function."
@@ -913,7 +890,7 @@ class SimpleLossCompute:
 > This code predicts a translation using greedy decoding for simplicity. 
 <!-- #endregion -->
 
-```python colab={"base_uri": "https://localhost:8080/"} id="qgIZ2yEtdYwe" outputId="26c61be4-b43d-4f2a-b480-29e66d24993d"
+```python id="qgIZ2yEtdYwe"
 # Train the simple copy task.
 
 V = 11
@@ -936,7 +913,7 @@ for epoch in range(10):
                     SimpleLossCompute(model.generator, criterion, None)))
 ```
 
-```python colab={"base_uri": "https://localhost:8080/"} id="N2UOpnT3bIyU" outputId="b57bd95e-7df1-4fd2-e309-eba736e68ec4"
+```python id="N2UOpnT3bIyU"
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
@@ -964,18 +941,18 @@ print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
 > Now we consider a real-world example using the IWSLT German-English Translation task. This task is much smaller than the WMT task considered in the paper, but it illustrates the whole system. We also show how to use multi-gpu processing to make it really fast.
 <!-- #endregion -->
 
-```python tags=[] id="PnNSk_TSTsqL"
+```python id="PnNSk_TSTsqL" tags=[]
 #!pip install torchtext spacy
 #!python -m spacy download en
 #!python -m spacy download de
 ```
 
-<!-- #region tags=[] id="8y9dpfolTsqL" -->
+<!-- #region id="8y9dpfolTsqL" tags=[] -->
 ## Data Loading
 > We will load the dataset using torchtext and spacy for tokenization. 
 <!-- #endregion -->
 
-```python tags=[] id="t4BszXXJTsqL"
+```python id="t4BszXXJTsqL" tags=[]
 from torchtext.vocab import build_vocab_from_iterator
 import torchtext.datasets as datasets
 import spacy
@@ -994,7 +971,7 @@ def yield_tokens(data_iter, tokenizer, index):
         yield tokenizer(from_to_tuple[index])
 ```
 
-```python tags=[]
+```python tags=[] id="GogOSS-gl0Uc"
 print("Building German Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=('de', 'en'))
 vocab_src = build_vocab_from_iterator(yield_tokens(train + val + test, tokenize_de, index=0),
@@ -1019,11 +996,11 @@ print(len(vocab_tgt))
 > Batching matters a ton for speed. We want to have very evenly divided batches, with absolutely minimal padding. To do this we have to hack a bit around the default torchtext batching. This code patches their default batching to make sure we search over enough sentences to find tight batches. 
 <!-- #endregion -->
 
-<!-- #region tags=[] jp-MarkdownHeadingCollapsed=true -->
+<!-- #region tags=[] jp-MarkdownHeadingCollapsed=true id="rO0ODNCAl0Uc" -->
 ## Iterators
 <!-- #endregion -->
 
-```python tags=[]
+```python tags=[] id="Lu6cn0tpl0Uc"
 from torch.utils.data import DataLoader
 from torch.nn.functional import pad
 
@@ -1044,7 +1021,7 @@ devices = range(torch.cuda.device_count()) # TODO - make this more general
 collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
 ```
 
-```python
+```python id="_45-h2n4l0Uc"
 def create_dataloaders(devices, batch_size=12000):
     collate_fn = lambda batch: collate_batch(batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0])
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=('de', 'en'))
@@ -1055,11 +1032,13 @@ def create_dataloaders(devices, batch_size=12000):
     return train_dataloader, valid_dataloader
 ```
 
+<!-- #region id="rAeOKhCcl0Uc" -->
 Make an iterator out of the dataloader and test sampling one batch.
 
 TODO: still need to replicate MyIterator logic which construct batches grouping together text of similar length
+<!-- #endregion -->
 
-<!-- #region tags=[] -->
+<!-- #region tags=[] id="dcZB2k1Rl0Uc" -->
 ## Multi-GPU Training
 
 > Finally to really target fast training, we will use multi-gpu. This code implements multi-gpu word generation. It is not specific to transformer so I won't go into too much detail. The idea is to split up word generation at training time into chunks to be processed in parallel across many different gpus. We do this using pytorch parallel primitives:
@@ -1072,7 +1051,7 @@ TODO: still need to replicate MyIterator logic which construct batches grouping 
 
 <!-- #endregion -->
 
-```python tags=[] id="EvDvTfXtTsqM"
+```python id="EvDvTfXtTsqM" tags=[]
 # Skip if not interested in multigpu.
 class MultiGPULossCompute:
     "A multi-gpu loss compute and train function."
@@ -1139,7 +1118,7 @@ class MultiGPULossCompute:
 > Now we create our model, criterion, optimizer, data iterators, and paralelization
 <!-- #endregion -->
 
-```python tags=[] id="4vF4f1RETsqM"
+```python id="4vF4f1RETsqM" tags=[]
 # GPUs to use
 devices = range(torch.cuda.device_count())
 
@@ -1163,11 +1142,11 @@ model_par = nn.DataParallel(model, device_ids=devices)
 ## Training the System
 <!-- #endregion -->
 
-```python tags=[] id="Kx53VVTgTsqM"
+```python id="Kx53VVTgTsqM" tags=[]
 #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 ```
 
-```python
+```python id="iHXupkEjl0Ud"
 def rebatch(pad_idx, batch):
     "Fix order in torchtext to match ours"
     src, trg = batch[0], batch[1]
@@ -1250,7 +1229,7 @@ for i, batch in enumerate(valid_iter):
 > 2) Shared Embeddings: When using BPE with shared vocabulary we can share the same weight vectors between the source / target / generator. See the [(cite)](https://arxiv.org/abs/1608.05859) for details. To add this to the model simply do this:
 <!-- #endregion -->
 
-```python tags=[] id="tb3j3CYLTsqN"
+```python id="tb3j3CYLTsqN" tags=[]
 if False:
     model.src_embed[0].lut.weight = model.tgt_embeddings[0].lut.weight
     model.generator.lut.weight = model.tgt_embed[0].lut.weight
@@ -1268,7 +1247,7 @@ if False:
 > 4) Model Averaging: The paper averages the last k checkpoints to create an ensembling effect. We can do this after the fact if we have a bunch of models:
 <!-- #endregion -->
 
-```python
+```python id="-jJvOqSal0Ue"
 def average(model, models):
     "Average models into model"
     for ps in zip(*[m.params() for m in [model] + models]):
@@ -1303,11 +1282,11 @@ Image(filename="images/results.png")
 > With the addtional extensions in the last section, the OpenNMT-py replication gets to 26.9 on EN-DE WMT. Here I have loaded in those parameters to our reimplemenation. 
 <!-- #endregion -->
 
-```python
+```python id="-LYQ8fg7l0Uf"
 !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 ```
 
-```python
+```python id="5_Cro0dVl0Uf"
 model, SRC, TGT = torch.load("en-de-model.pt")
 ```
 
@@ -1333,7 +1312,7 @@ print(trans)
 > Even with a greedy decoder the translation looks pretty good. We can further visualize it to see what is happening at each layer of the attention 
 <!-- #endregion -->
 
-```python
+```python id="T51ySP-Nl0Uf"
 # tgt_sent = trans.split()
 # def draw(data, x, y, ax):
 #    seaborn.heatmap(data, 
@@ -1367,7 +1346,7 @@ for layer in range(1, 6, 2):
 alt.vconcat(h_char[0],h_char[1],h_char[2])
 ```
 
-```python
+```python id="nW9WWHK7l0Uf"
 Atten_data=pd.concat([pd.DataFrame({"Similarity_Layer1h0":model.decoder.layers[layer].self_attn.attn[0, h].data[:len(tgt_sent), :len(tgt_sent)][x,y].flatten(),
                                   "W1":y1,
                                   "W2":x1,})
