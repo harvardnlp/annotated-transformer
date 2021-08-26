@@ -489,8 +489,7 @@ y = pe.forward(torch.zeros(1, 100, 20))
 
 data = pd.concat([pd.DataFrame({"embedding":y[0, :, dim],
                               "dim":dim,
-                              "position":list(range(100))
-                              })
+                              "position":list(range(100))})
                     for dim in [4, 5, 6, 7]])
 
 alt.Chart(data).mark_line().properties(width=600).encode(
@@ -699,43 +698,26 @@ for example in opts:
     lr_scheduler = LambdaLR(optimizer=optimizer,
                             lr_lambda=lambda step : rate(step, *example))
     tmp = []
-    for epoch in range(20000):
-
+    for step in range(20000):
         tmp.append(optimizer.param_groups[0]['lr'])
-
         optimizer.step()
-
         lr_scheduler.step()
-
         optimizer.zero_grad()
-
     show_list.append(tmp)
-```
 
-```python id="WfzlxDo7QLQW"
 show_list = torch.tensor(show_list).T
 ```
 
-```python id="JpPGA85MRJD3"
-lr_scheduler.state_dict()
-```
-
-
 ```python tags=[] id="eBUyjZJjokC8"
-# plt.plot(np.arange(1, 20001),show_list)
-# plt.legend(["512:4000", "512:8000", "256:4000"])
-# plt.gca().set_xlabel("Step")
-# plt.gca().set_ylabel("Learning Rate")
-
 ## Enable altair to handle more than 5000 rows
 alt.data_transformers.disable_max_rows()
 
-opts_data = pd.concat([pd.DataFrame({"Learning Rate": show_list[:, OptimSetup],
+opts_data = pd.concat([pd.DataFrame({"Learning Rate": show_list[:, warmup_idx],
                                      "model_size:warmup":["512:4000",
                                                           "512:8000",
-                                                          "256:4000"][OptimSetup],
+                                                          "256:4000"][warmup_idx],
                                      "step":list(range(20000))})
-                       for OptimSetup in [0, 1, 2]])
+                       for warmup_idx in [0, 1, 2]])
 
 alt.Chart(opts_data).mark_line().properties(width=600).encode(
     x="step",
@@ -816,14 +798,10 @@ alt.Chart(LS_data).mark_rect(color='Blue',opacity=1).properties(height=200,width
 ```python id="78EHzLP7TsqK"
 crit = LabelSmoothing(5, 0, 0.1)
 
-
 def loss(x):
-
     d = x + 3 * 1
-    predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d],
-                                 ])
+    predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d]])
     return crit(predict.log(), torch.LongTensor([1])).data
-
 
 loss_data = pd.DataFrame({"Loss":[loss(x) for x in range(1, 100)],
                         "steps":list(range(99))}).astype('float')
