@@ -21,8 +21,10 @@ install-jupytext-conda:
 	conda install jupytext -c conda-forge
 
 flake: The\ Annotated\ Transformer.ipynb
-	jupyter nbconvert The\ Annotated\ Transformer.ipynb --to python
 	flake8 --show-source The\ Annotated\ Transformer.py
 
+black: The\ Annotated\ Transformer.ipynb
+	black --line-length 79 The\ Annotated\ Transformer.py
+
 clean: 
-	rm -f The\ Annotated\ Transformer.py The\ Annotated\ Transformer.ipynb
+	rm -f The\ Annotated\ Transformer.ipynb
