@@ -1,16 +1,17 @@
-notebook: The\ Annotated\ Transformer.md
-	jupytext --to ipynb The\ Annotated\ Transformer.md
+notebook: The\ Annotated\ Transformer.py
+	jupytext --to ipynb The\ Annotated\ Transformer.py
 
-py: The\ Annotated\ Transformer.md
-	jupytext --to py The\ Annotated\ Transformer.md
+py: The\ Annotated\ Transformer.py
+	jupytext --to py The\ Annotated\ Transformer.py
 
-The\ Annotated\ Transformer.ipynb: The\ Annotated\ Transformer.md
-	jupytext --to ipynb The\ Annotated\ Transformer.md
+The\ Annotated\ Transformer.ipynb: The\ Annotated\ Transformer.py
+	jupytext --to ipynb The\ Annotated\ Transformer.py
 
-execute: The\ Annotated\ Transformer.md
-	jupytext --execute --to ipynb The\ Annotated\ Transformer.md
+execute: The\ Annotated\ Transformer.py
+	jupytext --execute --to ipynb The\ Annotated\ Transformer.py
 
 html: The\ Annotated\ Transformer.ipynb
+	jupytext --to ipynb The\ Annotated\ Transformer.py
 	jupyter nbconvert --to html The\ Annotated\ Transformer.ipynb
 
 install-jupytext-pip:
