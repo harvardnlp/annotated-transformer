@@ -1,3 +1,15 @@
 *.ipynb
 .ipynb_checkpoints
 .data
+*auto*
+*flymake*
+*~
+*aux
+*bbl
+*log
+*checkpoints*
+*out
+*blg
+*#*
+*_files*
+*synctex*
