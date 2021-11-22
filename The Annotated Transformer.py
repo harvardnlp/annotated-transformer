@@ -727,6 +727,7 @@ show_example(example_positional)
 
 # %% id="mPe1ES0UTsqI"
 
+
 def make_model(
     src_vocab, tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
 ):
@@ -1003,6 +1004,7 @@ show_example(example_train)
 
 # %% id="shU2GyiETsqK"
 
+
 class LabelSmoothing(nn.Module):
     "Implement label smoothing."
 
@@ -1039,16 +1041,6 @@ class LabelSmoothing(nn.Module):
 
 def example_label_smoothing():
     crit = LabelSmoothing(5, 0, 0.4)
-    predict = torch.FloatTensor(
-        [
-            [0, 0.2, 0.7, 0.1, 0],
-            [0, 0.2, 0.7, 0.1, 0],
-            [0, 0.2, 0.7, 0.1, 0],
-            [0, 0.2, 0.7, 0.1, 0],
-            [0, 0.2, 0.7, 0.1, 0],
-        ]
-    )
-
     LS_data = pd.concat(
         [
             pd.DataFrame(
@@ -1124,6 +1116,7 @@ show_example(example_label_smoothing2)
 
 # %% id="g1aTxeqqTsqK"
 
+
 def data_gen(V, batch, nbatches):
     "Generate random data for a src-tgt copy task."
     for i in range(nbatches):
@@ -1148,12 +1141,12 @@ class SimpleLossCompute:
 
     def __call__(self, x, y, norm):
         x = self.generator(x)
-        loss = (
+        sloss = (
             self.criterion(
                 x.contiguous().view(-1, x.size(-1)), y.contiguous().view(-1)
             ) / norm
         )
-        loss.backward()
+        sloss.backward()
         if self.opt is not None:
             self.opt.step()
 
@@ -1211,7 +1204,7 @@ def example_simple_model():
             data_gen(V, 30, 20),
             model,
             SimpleLossCompute(
-                model.generator, criterion, model_opt, lr_scheduler
+                model.generator, criterion, optimizer, lr_scheduler
             ),
         )
         model.eval()
@@ -1532,19 +1525,19 @@ if create_model:
                 model.generator,
                 criterion,
                 devices=devices,
-                opt=model_opt,
+                opt=optimizer,
                 lr_scheduler=lr_scheduler,
             ),
         )
         model_par.eval()
-        loss = run_epoch(
+        sloss = run_epoch(
             (rebatch(pad_idx, b) for b in valid_dataloader),
             model_par,
             MultiGPULossCompute(
                 model.generator, criterion, devices=devices, opt=None
             ),
         )
-        print(loss)
+        print(sloss)
 else:
     model = torch.load("iwslt.pt")
 
@@ -1556,27 +1549,27 @@ else:
 # > with greedy search are reasonably accurate.
 
 # %% id="f0mNHT4iTsqN"
-for i, batch in enumerate(valid_iter):
-    src = batch.src.transpose(0, 1)[:1]
-    src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
-    out = greedy_decode(
-        model, src, src_mask, max_len=60, start_symbol=TGT.vocab.stoi["<s>"]
-    )
-    print("Translation:", end="\t")
-    for i in range(1, out.size(1)):
-        sym = TGT.vocab.itos[out[0, i]]
-        if sym == "</s>":
-            break
-        print(sym, end=" ")
-    print()
-    print("Target:", end="\t")
-    for i in range(1, batch.tgt.size(0)):
-        sym = TGT.vocab.itos[batch.tgt.data[i, 0]]
-        if sym == "</s>":
-            break
-        print(sym, end=" ")
-    print()
-    break
+# for i, batch in enumerate(valid_iter):
+#     src = batch.src.transpose(0, 1)[:1]
+#     src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
+#     out = greedy_decode(
+#         model, src, src_mask, max_len=60, start_symbol=TGT.vocab.stoi["<s>"]
+#     )
+#     print("Translation:", end="\t")
+#     for i in range(1, out.size(1)):
+#         sym = TGT.vocab.itos[out[0, i]]
+#         if sym == "</s>":
+#             break
+#         print(sym, end=" ")
+#     print()
+#     print("Target:", end="\t")
+#     for i in range(1, batch.tgt.size(0)):
+#         sym = TGT.vocab.itos[batch.tgt.data[i, 0]]
+#         if sym == "</s>":
+#             break
+#         print(sym, end=" ")
+#     print()
+#     break
 
 # %% [markdown] id="L50i0iEXTsqN"
 # # Additional Components: BPE, Search, Averaging
@@ -1634,7 +1627,7 @@ if False:
 def average(model, models):
     "Average models into model"
     for ps in zip(*[m.params() for m in [model] + models]):
-        p[0].copy_(torch.sum(*ps[1:]) / len(ps[1:]))
+        ps[0].copy_(torch.sum(*ps[1:]) / len(ps[1:]))
 
 
 # %% [markdown] id="Kz5BYJ9sTsqO"
@@ -1706,124 +1699,126 @@ print(trans)
 # %% id="6aS3Be3jokDB"
 
 
-def example_attention(model):
-    Atten_data = pd.concat(
-        [
-            pd.DataFrame(
-                {
-                    "Similarity_Layer1h0": model.encoder.layers[layer]
-                    .self_attn.attn[0, h]
-                    .data[x, y]
-                    .flatten(),
-                    "W1": y1,
-                    "W2": x1,
-                }
-            )
-            for y, y1 in enumerate(sent)
-            for x, x1 in enumerate(sent)
-        ]
-    )
+def example_attention(model, tgt_sent):
+    return None
+    # Atten_data = pd.concat(
+    #     [
+    #         pd.DataFrame(
+    #             {
+    #                 "Similarity_Layer1h0": model.encoder.layers[0]
+    #                 .self_attn.attn[0, h]
+    #                 .data[x, y]
+    #                 .flatten(),
+    #                 "W1": y1,
+    #                 "W2": x1,
+    #             }
+    #         )
+    #         for y, y1 in enumerate(sent)
+    #         for x, x1 in enumerate(sent)
+    #     ]
+    # )
 
-    char = []
-    h_char = []
-    for layer in range(1, 6, 2):
-        for h in range(4):
-            Layer_name = "Similarity_Layer" + str(layer) + "h" + str(h)
-            Atten_data[Layer_name] = (
-                model.encoder.layers[layer].self_attn.attn[0, h].data.flatten()
-            )
+    # char = []
+    # h_char = []
+    # for layer in range(1, 6, 2):
+    #     for h in range(4):
+    #         Layer_name = "Similarity_Layer" + str(layer) + "h" + str(h)
+    #         Atten_data[Layer_name] = (
+    #             model.encoder.layers[layer] \
+    #                 .self_attn.attn[0, h].data.flatten()
+    #         )
 
-            base = (
-                alt.Chart(Atten_data)
-                .mark_rect(opacity=1)
-                .properties(height=150, width=150)
-                .encode(
-                    alt.X(
-                        "W2:N",
-                        sort=sent,
-                        title=None,
-                    ),
-                    alt.Y("W1:N", sort=sent, title=None),
-                    alt.Color(
-                        Layer_name + ":Q", scale=alt.Scale(scheme="darkred")
-                    ),
-                )
-            )
-            char.append(base)
-        h_char.append(
-            alt.hconcat(
-                char[0],
-                char[1],
-                char[2],
-                char[3],
-                title="Encoder Layer" + str(layer + 1),
-            )
-        )
-        char = []
+    #         base = (
+    #             alt.Chart(Atten_data)
+    #             .mark_rect(opacity=1)
+    #             .properties(height=150, width=150)
+    #             .encode(
+    #                 alt.X(
+    #                     "W2:N",
+    #                     sort=sent,
+    #                     title=None,
+    #                 ),
+    #                 alt.Y("W1:N", sort=sent, title=None),
+    #                 alt.Color(
+    #                     Layer_name + ":Q", scale=alt.Scale(scheme="darkred")
+    #                 ),
+    #             )
+    #         )
+    #         char.append(base)
+    #     h_char.append(
+    #         alt.hconcat(
+    #             char[0],
+    #             char[1],
+    #             char[2],
+    #             char[3],
+    #             title="Encoder Layer" + str(layer + 1),
+    #         )
+    #     )
+    #     char = []
 
-    alt.vconcat(h_char[0], h_char[1], h_char[2])
+    # alt.vconcat(h_char[0], h_char[1], h_char[2])
 
-    # %% id="17lYaiKDokDC"
-    Atten_data = pd.concat(
-        [
-            pd.DataFrame(
-                {
-                    "Similarity_Layer1h0": model.decoder.layers[layer]
-                    .self_attn.attn[0, h]
-                    .data[: len(tgt_sent), : len(tgt_sent)][x, y]
-                    .flatten(),
-                    "W1": y1,
-                    "W2": x1,
-                }
-            )
-            for y, y1 in enumerate(sent)
-            for x, x1 in enumerate(tgt_sent)
-        ]
-    )
+    # # %% id="17lYaiKDokDC"
+    # Atten_data = pd.concat(
+    #     [
+    #         pd.DataFrame(
+    #             {
+    #                 "Similarity_Layer1h0": model.decoder.layers[layer]
+    #                 .self_attn.attn[0, h]
+    #                 .data[: len(tgt_sent), : len(tgt_sent)][x, y]
+    #                 .flatten(),
+    #                 "W1": y1,
+    #                 "W2": x1,
+    #             }
+    #         )
+    #         for y, y1 in enumerate(sent)
+    #         for x, x1 in enumerate(tgt_sent)
+    #     ]
+    # )
 
-    char = []
-    h_char = []
-    for layer in range(1, 6, 2):
-        for h in range(4):
-            Layer_name = "Similarity_Layer" + str(layer) + "h" + str(h)
-            Atten_data[Layer_name] = (
-                model.decoder.layers[layer]
-                .self_attn.attn[0, h]
-                .data[: len(tgt_sent), : len(sent)]
-                .flatten()
-            )
-            base = (
-                alt.Chart(Atten_data)
-                .mark_rect(opacity=1)
-                .properties(height=150, width=150)
-                .encode(
-                    alt.X(
-                        "W2:N",
-                        sort=sent,
-                        title=None,
-                    ),
-                    alt.Y("W1:N", sort=sent, title=None),
-                    alt.Color(
-                        Layer_name + ":Q", scale=alt.Scale(scheme="darkred")
-                    ),
-                )
-            )
-            char.append(base)
-        h_char.append(
-            alt.hconcat(
-                char[0],
-                char[1],
-                char[2],
-                char[3],
-                title="Decoder Layer" + str(layer + 1),
-            )
-        )
-        char = []
+    # char = []
+    # h_char = []
+    # for layer in range(1, 6, 2):
+    #     for h in range(4):
+    #         Layer_name = "Similarity_Layer" + str(layer) + "h" + str(h)
+    #         Atten_data[Layer_name] = (
+    #             model.decoder.layers[layer]
+    #             .self_attn.attn[0, h]
+    #             .data[: len(tgt_sent), : len(sent)]
+    #             .flatten()
+    #         )
+    #         base = (
+    #             alt.Chart(Atten_data)
+    #             .mark_rect(opacity=1)
+    #             .properties(height=150, width=150)
+    #             .encode(
+    #                 alt.X(
+    #                     "W2:N",
+    #                     sort=sent,
+    #                     title=None,
+    #                 ),
+    #                 alt.Y("W1:N", sort=sent, title=None),
+    #                 alt.Color(
+    #                     Layer_name + ":Q", scale=alt.Scale(scheme="darkred")
+    #                 ),
+    #             )
+    #         )
+    #         char.append(base)
+    #     h_char.append(
+    #         alt.hconcat(
+    #             char[0],
+    #             char[1],
+    #             char[2],
+    #             char[3],
+    #             title="Decoder Layer" + str(layer + 1),
+    #         )
+    #     )
+    #     char = []
 
-    return alt.vconcat(h_char[0], h_char[1], h_char[2])
+    # return alt.vconcat(h_char[0], h_char[1], h_char[2])
 
 
-show_example(example_attention, [model])
+show_example(example_attention, [model, trans.split()])
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
