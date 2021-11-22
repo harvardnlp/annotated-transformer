@@ -82,7 +82,7 @@ def show_example(fn, args=[]):
 
 
 def train_example(fn, args=[]):
-    pass
+    fn(*args)
 
 
 # %% [markdown] id="RSntDwKhTsp-"
@@ -1041,6 +1041,12 @@ class LabelSmoothing(nn.Module):
 
 def example_label_smoothing():
     crit = LabelSmoothing(5, 0, 0.4)
+    predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
+                                 [0, 0.2, 0.7, 0.1, 0],
+                                 [0, 0.2, 0.7, 0.1, 0],
+                                 [0, 0.2, 0.7, 0.1, 0],
+                                 [0, 0.2, 0.7, 0.1, 0]])
+    crit(x=predict.log(), target=torch.LongTensor([2, 1, 0, 3, 3]))
     LS_data = pd.concat(
         [
             pd.DataFrame(
@@ -1138,6 +1144,7 @@ class SimpleLossCompute:
         self.generator = generator
         self.criterion = criterion
         self.opt = opt
+        self.lr_scheduler = lr_scheduler
 
     def __call__(self, x, y, norm):
         x = self.generator(x)
@@ -1151,8 +1158,9 @@ class SimpleLossCompute:
             self.opt.step()
 
             self.opt.zero_grad()
-            lr_scheduler.step()
-        return loss.data * norm
+            if self.lr_scheduler:
+                self.lr_scheduler.step()
+        return sloss.data * norm
 
 
 # %% [markdown] id="eDAI7ELUTsqL"
@@ -1360,127 +1368,7 @@ def create_dataloaders(devices, batch_size=12000):
     return train_dataloader, valid_dataloader
 
 
-# %% [markdown] id="SZpuTTK1okC_"
-# Make an iterator out of the dataloader and test sampling one batch.
-#
-# TODO: still need to replicate MyIterator logic which construct
-# batches grouping together text of similar length
-
-# %% [markdown] id="p9K8Ck3ookC_" tags=[]
-# ## Multi-GPU Training
-#
-# > Finally to really target fast training, we will use
-# > multi-gpu. This code implements multi-gpu word generation. It is
-# > not specific to transformer so I won't go into too much
-# > detail. The idea is to split up word generation at training time
-# > into chunks to be processed in parallel across many different
-# > gpus. We do this using pytorch parallel primitives:
-#
-# * replicate - split modules onto different gpus.
-# * scatter - split batches onto different gpus
-# * parallel_apply - apply module to batches on different gpus
-# * gather - pull scattered data back onto one gpu.
-# * nn.DataParallel - a special module wrapper that
-#    calls these all before evaluating.
-#
-
 # %% id="EvDvTfXtTsqM" tags=[]
-# Skip if not interested in multigpu.
-class MultiGPULossCompute:
-    "A multi-gpu loss compute and train function."
-
-    def __init__(
-        self,
-        generator,
-        criterion,
-        devices,
-        opt=None,
-        chunk_size=5,
-        lr_scheduler=None,
-    ):
-        # Send out to different gpus.
-        self.generator = generator
-        self.criterion = nn.parallel.replicate(criterion, devices=devices)
-        self.opt = opt
-        self.devices = devices
-        self.chunk_size = chunk_size
-
-    def __call__(self, out, targets, normalize):
-        total = 0.0
-        generator = nn.parallel.replicate(self.generator, devices=self.devices)
-        out_scatter = nn.parallel.scatter(out, target_gpus=self.devices)
-        out_grad = [[] for _ in out_scatter]
-        targets = nn.parallel.scatter(targets, target_gpus=self.devices)
-
-        # Divide generating into chunks.
-        chunk_size = self.chunk_size
-        for i in range(0, out_scatter[0].size(1), chunk_size):
-            # Predict distributions
-            out_column = [
-                [
-                    o[:, i:i + chunk_size].data.requires_grad_(
-                        self.opt is not None
-                    )
-                    for o in out_scatter
-                ]
-            ]
-            gen = nn.parallel.parallel_apply(generator, out_column)
-
-            # Compute loss.
-            y = [
-                (
-                    g.contiguous().view(-1, g.size(-1)),
-                    t[:, i:i + chunk_size].contiguous().view(-1),
-                )
-                for g, t in zip(gen, targets)
-            ]
-            loss = nn.parallel.parallel_apply(self.criterion, y)
-
-            # Sum and normalize loss
-            loss = nn.parallel.gather(loss, target_device=self.devices[0])
-            loss = loss.sum()[0] / normalize
-            total += loss.data[0]
-
-            # Backprop loss to output of transformer
-            if self.opt is not None:
-                loss.backward()
-                for j, l in enumerate(loss):
-                    out_grad[j].append(out_column[j][0].grad.data.clone())
-
-        # Backprop all loss through transformer.
-        if self.opt is not None:
-            out_grad = [torch.cat(og, dim=1) for og in out_grad]
-            o1 = out
-            o2 = nn.parallel.gather(out_grad, target_device=self.devices[0])
-            o1.backward(gradient=o2)
-            self.opt.step()
-
-            self.opt.zero_grad()
-            lr_scheduler.step()
-        return total * normalize
-
-
-# %% [markdown] id="wUvWgHLFTsqM"
-
-# > Now we create our model, criterion, optimizer, data iterators, and
-# > paralelization
-
-# %% id="4vF4f1RETsqM" tags=[]
-# GPUs to use
-devices = range(torch.cuda.device_count())
-
-pad_idx = vocab_tgt["<blank>"]
-model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-model.cuda()
-criterion = LabelSmoothing(
-    size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
-)
-criterion.cuda()
-
-BATCH_SIZE = 12000
-train_dataloader, valid_dataloader = create_dataloaders(devices, BATCH_SIZE)
-
-model_par = nn.DataParallel(model, device_ids=devices)
 
 
 # %% [markdown] id="n-aVUlpjTsqM"
@@ -1505,8 +1393,19 @@ def rebatch(pad_idx, batch):
 
 # %% id="jZeYHJcdTsqN"
 create_model = False
+devices = range(torch.cuda.device_count())
 
 if create_model:
+    pad_idx = vocab_tgt["<blank>"]
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.cuda()
+    criterion = LabelSmoothing(size=len(vocab_tgt),
+                               padding_idx=pad_idx, smoothing=0.1)
+    criterion.cuda()
+    BATCH_SIZE = 12000
+    train_dataloader, valid_dataloader = \
+        create_dataloaders(devices[0], BATCH_SIZE)
+
     optimizer = torch.optim.Adam(
         model.parameters(), lr=1e-3, betas=(0.9, 0.98), eps=1e-9
     )
@@ -1517,24 +1416,23 @@ if create_model:
         ),
     )
     for epoch in range(10):
-        model_par.train()
+        model.train()
         run_epoch(
             (rebatch(pad_idx, b) for b in train_dataloader),
-            model_par,
-            MultiGPULossCompute(
+            model,
+            SimpleLossCompute(
                 model.generator,
                 criterion,
-                devices=devices,
                 opt=optimizer,
                 lr_scheduler=lr_scheduler,
             ),
         )
-        model_par.eval()
+        model.eval()
         sloss = run_epoch(
             (rebatch(pad_idx, b) for b in valid_dataloader),
-            model_par,
-            MultiGPULossCompute(
-                model.generator, criterion, devices=devices, opt=None
+            model,
+            SimpleLossCompute(
+                model.generator, criterion, opt=None
             ),
         )
         print(sloss)
@@ -1648,7 +1546,6 @@ def average(model, models):
 # previous state-of-the-art model. The Transformer (big) model trained
 # for English-to-French used dropout rate Pdrop = 0.1, instead of 0.3.
 #
-#
 
 # %% [markdown]
 # ![](images/results.png)
@@ -1667,27 +1564,31 @@ def average(model, models):
 # !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 
 # %% id="Y37eUkL-okDB"
-model, SRC, TGT = torch.load("en-de-model.pt")
+def example_greedy():
+    model, SRC, TGT = torch.load("en-de-model.pt")
 
-# %% id="Gh_uGlLBTsqO"
-model.eval()
-sent = """
-▁The ▁log ▁file ▁can ▁be ▁sent ▁secret ly ▁with ▁email ▁or
-▁FTP ▁to ▁a ▁specified ▁receiver
-""".split()
-src = torch.LongTensor([[SRC.stoi[w] for w in sent]])
-src_mask = (src != SRC.stoi["<blank>"]).unsqueeze(-2)
-out = greedy_decode(
-    model, src, src_mask, max_len=60, start_symbol=TGT.stoi["<s>"]
-)
-print("Translation:", end="\t")
-trans = "<s> "
-for i in range(1, out.size(1)):
-    sym = TGT.itos[out[0, i]]
-    if sym == "</s>":
-        break
-    trans += sym + " "
-print(trans)
+    model.eval()
+    sent = """
+    ▁The ▁log ▁file ▁can ▁be ▁sent ▁secret ly ▁with ▁email ▁or
+    ▁FTP ▁to ▁a ▁specified ▁receiver
+    """.split()
+    src = torch.LongTensor([[SRC.stoi[w] for w in sent]])
+    src_mask = (src != SRC.stoi["<blank>"]).unsqueeze(-2)
+    out = greedy_decode(
+        model, src, src_mask, max_len=60, start_symbol=TGT.stoi["<s>"]
+    )
+    print("Translation:", end="\t")
+    trans = "<s> "
+    for i in range(1, out.size(1)):
+        sym = TGT.itos[out[0, i]]
+        if sym == "</s>":
+            break
+        trans += sym + " "
+    print(trans)
+    return trans
+
+
+show_example(example_greedy)
 
 # %% [markdown] id="0ZkkNTKLTsqO"
 # ## Attention Visualization
@@ -1818,7 +1719,7 @@ def example_attention(model, tgt_sent):
     # return alt.vconcat(h_char[0], h_char[1], h_char[2])
 
 
-show_example(example_attention, [model, trans.split()])
+# show_example(example_attention, [model, trans.split()])
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
