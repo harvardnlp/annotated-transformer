@@ -17,7 +17,7 @@
 # ![Main Figure](images/aiayn.png)
 
 # %% [markdown] id="SX7UC-8jTsp7"
-
+#
 # The Transformer from ["Attention is All You
 # Need"](https://arxiv.org/abs/1706.03762) has been on a lot of
 # people's minds over the last year. Besides producing major
@@ -99,7 +99,7 @@ def train_example(fn, args=[]):
 # # Background
 
 # %% [markdown] id="83ZDS91dTsqA"
-
+#
 # The goal of reducing sequential computation also forms the
 # foundation of the Extended Neural GPU, ByteNet and ConvS2S, all of
 # which use convolutional neural networks as basic building block,
@@ -132,7 +132,7 @@ def train_example(fn, args=[]):
 # # Model Architecture
 
 # %% [markdown] id="ReuU_h-fTsqB"
-
+#
 # Most competitive neural sequence transduction models have an
 # encoder-decoder structure
 # [(cite)](https://arxiv.org/abs/1409.0473). Here, the encoder maps an
@@ -183,7 +183,7 @@ class Generator(nn.Module):
 
 
 # %% [markdown] id="mOoEnF_jTsqC"
-
+#
 # The Transformer follows this overall architecture using stacked
 # self-attention and point-wise, fully connected layers for both the
 # encoder and decoder, shown in the left and right halves of Figure 1,
@@ -223,7 +223,7 @@ class Encoder(nn.Module):
 
 
 # %% [markdown] id="GjAKgjGwTsqD"
-
+#
 # We employ a residual connection
 # [(cite)](https://arxiv.org/abs/1512.03385) around each of the two
 # sub-layers, followed by layer normalization
@@ -246,7 +246,7 @@ class LayerNorm(nn.Module):
 
 
 # %% [markdown] id="nXSJ3QYmTsqE"
-
+#
 # That is, the output of each sub-layer is $\mathrm{LayerNorm}(x +
 # \mathrm{Sublayer}(x))$, where $\mathrm{Sublayer}(x)$ is the function
 # implemented by the sub-layer itself.  We apply dropout
@@ -276,7 +276,7 @@ class SublayerConnection(nn.Module):
 
 
 # %% [markdown] id="ML6oDlEqTsqE"
-
+#
 # Each layer has two sub-layers. The first is a multi-head
 # self-attention mechanism, and the second is a simple, position-wise
 # fully connected feed-forward network.
@@ -320,7 +320,7 @@ class Decoder(nn.Module):
 
 
 # %% [markdown] id="dXlCB12pTsqF"
-
+#
 # In addition to the two sub-layers in each encoder layer, the decoder
 # inserts a third sub-layer, which performs multi-head attention over
 # the output of the encoder stack.  Similar to the encoder, we employ
@@ -348,7 +348,7 @@ class DecoderLayer(nn.Module):
 
 
 # %% [markdown] id="FZz5rLl4TsqF"
-
+#
 # We also modify the self-attention sub-layer in the decoder stack to
 # prevent positions from attending to subsequent positions.  This
 # masking, combined with fact that the output embeddings are offset by
@@ -366,7 +366,7 @@ def subsequent_mask(size):
 
 
 # %% [markdown] id="Vg_f_w-PTsqG"
-
+#
 # > Below the attention mask shows the position each tgt word (row) is
 # > allowed to look at (column). Words are blocked for attending to
 # > future words during training.
@@ -398,7 +398,7 @@ show_example(example_mask)
 
 # %% [markdown] id="Qto_yg7BTsqG"
 # ### Attention
-
+#
 # An attention function can be described as mapping a query and a set
 # of key-value pairs to an output, where the query, keys, values, and
 # output are all vectors.  The output is computed as a weighted sum of
@@ -417,7 +417,7 @@ show_example(example_mask)
 
 
 # %% [markdown] id="EYJLWk6cTsqG"
-
+#
 # In practice, we compute the attention function on a set of queries
 # simultaneously, packed together into a matrix $Q$.  The keys and
 # values are also packed together into matrices $K$ and $V$.  We
@@ -441,7 +441,7 @@ def attention(query, key, value, mask=None, dropout=None):
 
 
 # %% [markdown] id="jUkpwu8kTsqG"
-
+#
 # The two most commonly used attention functions are additive
 # attention [(cite)](https://arxiv.org/abs/1409.0473), and dot-product
 # (multiplicative) attention.  Dot-product attention is identical to
@@ -474,11 +474,11 @@ def attention(query, key, value, mask=None, dropout=None):
 
 
 # %% [markdown] id="TNtVyZ-pTsqH"
-
+#
 # Multi-head attention allows the model to jointly attend to
 # information from different representation subspaces at different
 # positions. With a single attention head, averaging inhibits this.
-
+#
 # $$
 # \mathrm{MultiHead}(Q, K, V) =
 #     \mathrm{Concat}(\mathrm{head_1}, ..., \mathrm{head_h})W^O \\
@@ -490,7 +490,7 @@ def attention(query, key, value, mask=None, dropout=None):
 # \mathbb{R}^{d_{\text{model}} \times d_k}$, $W^V_i \in
 # \mathbb{R}^{d_{\text{model}} \times d_v}$ and $W^O \in
 # \mathbb{R}^{hd_v \times d_{\text{model}}}$.
-
+#
 # In this work we employ $h=8$ parallel attention layers, or
 # heads. For each of these we use $d_k=d_v=d_{\text{model}}/h=64$. Due
 # to the reduced dimension of each head, the total computational cost
@@ -539,7 +539,7 @@ class MultiHeadedAttention(nn.Module):
 
 # %% [markdown] id="EDRba3J3TsqH"
 # ### Applications of Attention in our Model
-
+#
 # The Transformer uses multi-head attention in three different ways:
 # 1) In "encoder-decoder attention" layers, the queries come from the
 # previous decoder layer, and the memory keys and values come from the
@@ -598,7 +598,7 @@ class PositionwiseFeedForward(nn.Module):
 
 # %% [markdown] id="dR1YM520TsqH"
 # ## Embeddings and Softmax
-
+#
 # Similarly to other sequence transduction models, we use learned
 # embeddings to convert the input tokens and output tokens to vectors
 # of dimension $d_{\text{model}}$.  We also use the usual learned
@@ -622,7 +622,7 @@ class Embeddings(nn.Module):
 
 # %% [markdown] id="vOkdui-cTsqH"
 # ## Positional Encoding
-
+#
 # Since our model contains no recurrence and no convolution, in order
 # for the model to make use of the order of the sequence, we must
 # inject some information about the relative or absolute position of
@@ -634,11 +634,11 @@ class Embeddings(nn.Module):
 # [(cite)](https://arxiv.org/pdf/1705.03122.pdf).
 #
 # In this work, we use sine and cosine functions of different frequencies:
-
+#
 # $$PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}})$$
 #
 # $$PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})$$
-
+#
 # where $pos$ is the position and $i$ is the dimension.  That is, each
 # dimension of the positional encoding corresponds to a sinusoid.  The
 # wavelengths form a geometric progression from $2\pi$ to $10000 \cdot
@@ -678,7 +678,7 @@ class PositionalEncoding(nn.Module):
 
 
 # %% [markdown] id="EfHacTJLTsqH"
-
+#
 # > Below the positional encoding will add in a sine wave based on
 # > position. The frequency and offset of the wave is different for
 # > each dimension.
@@ -712,7 +712,7 @@ def example_positional():
 show_example(example_positional)
 
 # %% [markdown] id="g8rZNCrzTsqI"
-
+#
 # We also experimented with using learned positional embeddings
 # [(cite)](https://arxiv.org/pdf/1705.03122.pdf) instead, and found
 # that the two versions produced nearly identical results.  We chose
@@ -763,7 +763,7 @@ tmp_model = make_model(10, 10, 2)
 # This section describes the training regime for our models.
 
 # %% [markdown] id="fTxlofs4TsqI"
-
+#
 # > We stop for a quick interlude to introduce some of the tools
 # > needed to train a standard encoder decoder model. First we define a
 # > batch object that holds the src and target sentences for training,
@@ -796,7 +796,7 @@ class Batch:
 
 
 # %% [markdown] id="cKkw5GjLTsqI"
-
+#
 # > Next we create a generic training and scoring function to keep
 # > track of loss. We pass in a generic loss compute function that
 # > also handles parameter updates.
@@ -846,7 +846,7 @@ def run_epoch(data_iter, model, loss_compute):
 # approximately 25000 source tokens and 25000 target tokens.
 
 # %% [markdown] id="J0w5i6oHTsqJ"
-
+#
 # > We will use torch text for batching. This is discussed in more
 # > detail below. Here we create batches in a torchtext function that
 # > ensures our batch size padded to the maximum batchsize does not
@@ -873,7 +873,7 @@ def batch_size_fn(new, count, sofar):
 
 # %% [markdown] id="F1mTQatiTsqJ" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Hardware and Schedule
-
+#
 # We trained our models on one machine with 8 NVIDIA P100 GPUs.  For
 # our base models using the hyperparameters described throughout the
 # paper, each training step took about 0.4 seconds.  We trained the
@@ -888,25 +888,25 @@ def batch_size_fn(new, count, sofar):
 # with $\beta_1=0.9$, $\beta_2=0.98$ and $\epsilon=10^{-9}$.  We
 # varied the learning rate over the course of training, according to
 # the formula:
-
+#
 # $$
 # lrate = d_{\text{model}}^{-0.5} \cdot
 #   \min({step\_num}^{-0.5},
 #     {step\_num} \cdot {warmup\_steps}^{-1.5})
 # $$
-
+#
 # This corresponds to increasing the learning rate linearly for the
 # first $warmup\_steps$ training steps, and decreasing it thereafter
 # proportionally to the inverse square root of the step number.  We
 # used $warmup\_steps=4000$.
 
 # %% [markdown] id="39FbYnt-TsqJ"
-
+#
 # > Note: This part is very important. Need to train with this setup
 # > of the model.
 
 # %% [markdown] id="hlbojFkjTsqJ"
-
+#
 # > Example of the curves of this model for different model sizes and
 # > for optimization hyperparameters.
 
@@ -996,7 +996,7 @@ show_example(example_train)
 # improves accuracy and BLEU score.
 
 # %% [markdown] id="kNoAVD8bTsqK"
-
+#
 # > We implement label smoothing using the KL div loss. Instead of
 # > using a one-hot target distribution, we create a distribution that
 # > has `confidence` of the correct word and the rest of the
@@ -1031,7 +1031,7 @@ class LabelSmoothing(nn.Module):
 
 
 # %% [markdown] id="jCxUrlUyTsqK"
-
+#
 # > Here we can see an example of how the mass is distributed to the
 # > words based on confidence.
 
@@ -1078,7 +1078,7 @@ def example_label_smoothing():
 show_example(example_label_smoothing)
 
 # %% [markdown] id="CGM8J1veTsqK"
-
+#
 # > Label smoothing actually starts to penalize the model if it gets
 # > very confident about a given choice.
 
@@ -1243,7 +1243,7 @@ train_example(example_simple_model)
 
 # %% [markdown] id="8y9dpfolTsqL" tags=[]
 # ## Data Loading
-
+#
 # > We will load the dataset using torchtext and spacy for
 # > tokenization.
 
@@ -1292,7 +1292,7 @@ print(len(vocab_src))
 print(len(vocab_tgt))
 
 # %% [markdown] id="-l-TFwzfTsqL"
-
+#
 # > Batching matters a ton for speed. We want to have very evenly
 # > divided batches, with absolutely minimal padding. To do this we
 # > have to hack a bit around the default torchtext batching. This
@@ -1372,7 +1372,7 @@ def create_dataloaders(devices, batch_size=12000):
 
 
 # %% [markdown] id="n-aVUlpjTsqM"
-
+#
 # > Now we train the model. I will play with the warmup steps a bit,
 # > but everything else uses the default parameters.  On an AWS
 # > p3.8xlarge with 4 Tesla V100s, this runs at ~27,000 tokens per
@@ -1440,7 +1440,7 @@ else:
     model = torch.load("iwslt.pt")
 
 # %% [markdown] id="RZK_VjDPTsqN"
-
+#
 # > Once trained we can decode the model to produce a set of
 # > translations. Here we simply translate the first sentence in the
 # > validation set. This dataset is pretty small so the translations
@@ -1473,7 +1473,7 @@ else:
 # # Additional Components: BPE, Search, Averaging
 
 # %% [markdown] id="NBx1C2_NTsqN"
-
+#
 # > So this mostly covers the transformer model itself. There are four
 # > aspects that we didn't cover explicitly. We also have all these
 # > additional features implemented in
@@ -1482,7 +1482,7 @@ else:
 #
 
 # %% [markdown] id="UpqV1mWnTsqN"
-
+#
 # > 1) BPE/ Word-piece: We can use a library to first preprocess the
 # > data into subword units. See Rico Sennrich's
 # > [subword-nmt](https://github.com/rsennrich/subword-nmt)
@@ -1494,7 +1494,7 @@ else:
 # ▁an ▁einen ▁bestimmte n ▁Empfänger ▁gesendet ▁werden .
 
 # %% [markdown] id="9HwejYkpTsqN"
-
+#
 # > 2) Shared Embeddings: When using BPE with shared vocabulary we can
 # > share the same weight vectors between the source / target /
 # > generator. See the [(cite)](https://arxiv.org/abs/1608.05859) for
@@ -1507,7 +1507,7 @@ if False:
 
 
 # %% [markdown] id="xDKJsSwRTsqN"
-
+#
 # > 3) Beam Search: This is a bit too complicated to cover here. See
 # > the [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/blob/
 #
@@ -1516,7 +1516,7 @@ if False:
 #
 
 # %% [markdown] id="wf3vVYGZTsqN"
-
+#
 # > 4) Model Averaging: The paper averages the last k checkpoints to
 # > create an ensembling effect. We can do this after the fact if we
 # > have a bunch of models:
@@ -1551,7 +1551,7 @@ def average(model, models):
 # ![](images/results.png)
 
 # %% [markdown] id="cPcnsHvQTsqO"
-
+#
 # > The code we have written here is a version of the base
 # > model. There are fully trained version of this system available
 # > here [(Example Models)](http://opennmt.net/Models-py/).
