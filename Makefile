@@ -2,7 +2,7 @@ notebook: The\ Annotated\ Transformer.py
 	jupytext --to ipynb The\ Annotated\ Transformer.py
 
 py: The\ Annotated\ Transformer.ipynb
-	jupytext --to py The\ Annotated\ Transformer.ipynb
+	jupytext --to py:percent The\ Annotated\ Transformer.ipynb
 
 The\ Annotated\ Transformer.ipynb: The\ Annotated\ Transformer.py
 	jupytext --to ipynb The\ Annotated\ Transformer.py
