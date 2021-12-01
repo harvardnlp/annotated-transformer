@@ -4,8 +4,8 @@
 #   jupytext:
 #     text_representation:
 #       extension: .py
-#       format_name: percent
-#       format_version: '1.3'
+#       format_name: light
+#       format_version: '1.5'
 #       jupytext_version: 1.13.0
 #   kernelspec:
 #     display_name: Python 3
@@ -13,11 +13,10 @@
 #     name: python3
 # ---
 
-# %% [markdown]
 # ![Main Figure](images/aiayn.png)
 
-# %% [markdown] id="SX7UC-8jTsp7"
-
+# + [markdown] id="SX7UC-8jTsp7"
+#
 # The Transformer from ["Attention is All You
 # Need"](https://arxiv.org/abs/1706.03762) has been on a lot of
 # people's minds over the last year. Besides producing major
@@ -54,13 +53,13 @@
 # - srush@seas.harvard.edu)
 #
 
-# %% [markdown] id="BhmOhn9lTsp8"
+# + [markdown] id="BhmOhn9lTsp8"
 # # Prelims
 
-# %% id="NwClcbH6Tsp8"
+# + id="NwClcbH6Tsp8"
 # # !pip install -r requirements.txt
 
-# %% id="v1-1MX6oTsp9"
+# + id="v1-1MX6oTsp9"
 import torch
 import torch.nn as nn
 from torch.nn.functional import log_softmax, pad
@@ -85,21 +84,21 @@ def train_example(fn, args=[]):
     fn(*args)
 
 
-# %% [markdown] id="RSntDwKhTsp-"
+# + [markdown] id="RSntDwKhTsp-"
 # Table of Contents
 #
 #
 # * Table of Contents
 # {:toc}
 
-# %% [markdown] id="jx49WRyfTsp-"
+# + [markdown] id="jx49WRyfTsp-"
 # > My comments are blockquoted. The main text is all from the paper itself.
 
-# %% [markdown] id="7phVeWghTsp_"
+# + [markdown] id="7phVeWghTsp_"
 # # Background
 
-# %% [markdown] id="83ZDS91dTsqA"
-
+# + [markdown] id="83ZDS91dTsqA"
+#
 # The goal of reducing sequential computation also forms the
 # foundation of the Extended Neural GPU, ByteNet and ConvS2S, all of
 # which use convolutional neural networks as basic building block,
@@ -128,11 +127,11 @@ def train_example(fn, args=[]):
 # representations of its input and output without using sequence
 # aligned RNNs or convolution.
 
-# %% [markdown] id="pFrPajezTsqB"
+# + [markdown] id="pFrPajezTsqB"
 # # Model Architecture
 
-# %% [markdown] id="ReuU_h-fTsqB"
-
+# + [markdown] id="ReuU_h-fTsqB"
+#
 # Most competitive neural sequence transduction models have an
 # encoder-decoder structure
 # [(cite)](https://arxiv.org/abs/1409.0473). Here, the encoder maps an
@@ -144,7 +143,7 @@ def train_example(fn, args=[]):
 # [(cite)](https://arxiv.org/abs/1308.0850), consuming the previously
 # generated symbols as additional input when generating the next.
 
-# %% id="k0XGXhzRTsqB"
+# + id="k0XGXhzRTsqB"
 class EncoderDecoder(nn.Module):
     """
     A standard Encoder-Decoder architecture. Base for this and many
@@ -170,7 +169,7 @@ class EncoderDecoder(nn.Module):
         return self.decoder(self.tgt_embed(tgt), memory, src_mask, tgt_mask)
 
 
-# %% id="NKGoH2RsTsqC"
+# + id="NKGoH2RsTsqC"
 class Generator(nn.Module):
     "Define standard linear + softmax generation step."
 
@@ -182,31 +181,31 @@ class Generator(nn.Module):
         return log_softmax(self.proj(x), dim=-1)
 
 
-# %% [markdown] id="mOoEnF_jTsqC"
-
+# + [markdown] id="mOoEnF_jTsqC"
+#
 # The Transformer follows this overall architecture using stacked
 # self-attention and point-wise, fully connected layers for both the
 # encoder and decoder, shown in the left and right halves of Figure 1,
 # respectively.
 
-# %% [markdown] id="oredWloYTsqC"
+# + [markdown] id="oredWloYTsqC"
 # ![](images/ModalNet-21.png)
 
 
-# %% [markdown] id="bh092NZBTsqD"
+# + [markdown] id="bh092NZBTsqD"
 # ## Encoder and Decoder Stacks
 #
 # ### Encoder
 #
 # The encoder is composed of a stack of $N=6$ identical layers.
 
-# %% id="2gxTApUYTsqD"
+# + id="2gxTApUYTsqD"
 def clones(module, N):
     "Produce N identical layers."
     return nn.ModuleList([copy.deepcopy(module) for _ in range(N)])
 
 
-# %% id="xqVTz9MkTsqD"
+# + id="xqVTz9MkTsqD"
 class Encoder(nn.Module):
     "Core encoder is a stack of N layers"
 
@@ -222,14 +221,14 @@ class Encoder(nn.Module):
         return self.norm(x)
 
 
-# %% [markdown] id="GjAKgjGwTsqD"
-
+# + [markdown] id="GjAKgjGwTsqD"
+#
 # We employ a residual connection
 # [(cite)](https://arxiv.org/abs/1512.03385) around each of the two
 # sub-layers, followed by layer normalization
 # [(cite)](https://arxiv.org/abs/1607.06450).
 
-# %% id="3jKa_prZTsqE"
+# + id="3jKa_prZTsqE"
 class LayerNorm(nn.Module):
     "Construct a layernorm module (See citation for details)."
 
@@ -245,8 +244,8 @@ class LayerNorm(nn.Module):
         return self.a_2 * (x - mean) / (std + self.eps) + self.b_2
 
 
-# %% [markdown] id="nXSJ3QYmTsqE"
-
+# + [markdown] id="nXSJ3QYmTsqE"
+#
 # That is, the output of each sub-layer is $\mathrm{LayerNorm}(x +
 # \mathrm{Sublayer}(x))$, where $\mathrm{Sublayer}(x)$ is the function
 # implemented by the sub-layer itself.  We apply dropout
@@ -258,7 +257,7 @@ class LayerNorm(nn.Module):
 # model, as well as the embedding layers, produce outputs of dimension
 # $d_{\text{model}}=512$.
 
-# %% id="U1P7zI0eTsqE"
+# + id="U1P7zI0eTsqE"
 class SublayerConnection(nn.Module):
     """
     A residual connection followed by a layer norm.
@@ -275,13 +274,13 @@ class SublayerConnection(nn.Module):
         return x + self.dropout(sublayer(self.norm(x)))
 
 
-# %% [markdown] id="ML6oDlEqTsqE"
-
+# + [markdown] id="ML6oDlEqTsqE"
+#
 # Each layer has two sub-layers. The first is a multi-head
 # self-attention mechanism, and the second is a simple, position-wise
 # fully connected feed-forward network.
 
-# %% id="qYkUFr6GTsqE"
+# + id="qYkUFr6GTsqE"
 class EncoderLayer(nn.Module):
     "Encoder is made up of self-attn and feed forward (defined below)"
 
@@ -298,13 +297,13 @@ class EncoderLayer(nn.Module):
         return self.sublayer[1](x, self.feed_forward)
 
 
-# %% [markdown] id="7ecOQIhkTsqF"
+# + [markdown] id="7ecOQIhkTsqF"
 # ### Decoder
 #
 # The decoder is also composed of a stack of $N=6$ identical layers.
 #
 
-# %% id="YE2KBGZETsqF"
+# + id="YE2KBGZETsqF"
 class Decoder(nn.Module):
     "Generic N layer decoder with masking."
 
@@ -319,15 +318,15 @@ class Decoder(nn.Module):
         return self.norm(x)
 
 
-# %% [markdown] id="dXlCB12pTsqF"
-
+# + [markdown] id="dXlCB12pTsqF"
+#
 # In addition to the two sub-layers in each encoder layer, the decoder
 # inserts a third sub-layer, which performs multi-head attention over
 # the output of the encoder stack.  Similar to the encoder, we employ
 # residual connections around each of the sub-layers, followed by
 # layer normalization.
 
-# %% id="M2hA1xFQTsqF"
+# + id="M2hA1xFQTsqF"
 class DecoderLayer(nn.Module):
     "Decoder is made of self-attn, src-attn, and feed forward (defined below)"
 
@@ -347,15 +346,15 @@ class DecoderLayer(nn.Module):
         return self.sublayer[2](x, self.feed_forward)
 
 
-# %% [markdown] id="FZz5rLl4TsqF"
-
+# + [markdown] id="FZz5rLl4TsqF"
+#
 # We also modify the self-attention sub-layer in the decoder stack to
 # prevent positions from attending to subsequent positions.  This
 # masking, combined with fact that the output embeddings are offset by
 # one position, ensures that the predictions for position $i$ can
 # depend only on the known outputs at positions less than $i$.
 
-# %% id="QN98O2l3TsqF"
+# + id="QN98O2l3TsqF"
 def subsequent_mask(size):
     "Mask out subsequent positions."
     attn_shape = (1, size, size)
@@ -365,13 +364,13 @@ def subsequent_mask(size):
     return subsequent_mask == 0
 
 
-# %% [markdown] id="Vg_f_w-PTsqG"
-
+# + [markdown] id="Vg_f_w-PTsqG"
+#
 # > Below the attention mask shows the position each tgt word (row) is
 # > allowed to look at (column). Words are blocked for attending to
 # > future words during training.
 
-# %% id="ht_FtgYAokC4"
+# + id="ht_FtgYAokC4"
 def example_mask():
     LS_data = pd.concat(
         [
@@ -396,9 +395,9 @@ def example_mask():
 
 show_example(example_mask)
 
-# %% [markdown] id="Qto_yg7BTsqG"
+# + [markdown] id="Qto_yg7BTsqG"
 # ### Attention
-
+#
 # An attention function can be described as mapping a query and a set
 # of key-value pairs to an output, where the query, keys, values, and
 # output are all vectors.  The output is computed as a weighted sum of
@@ -411,13 +410,13 @@ show_example(example_mask)
 # with all keys, divide each by $\sqrt{d_k}$, and apply a softmax
 # function to obtain the weights on the values.
 #
+# -
 
-# %% [markdown]
 # ![](images/ModalNet-19.png)
 
 
-# %% [markdown] id="EYJLWk6cTsqG"
-
+# + [markdown] id="EYJLWk6cTsqG"
+#
 # In practice, we compute the attention function on a set of queries
 # simultaneously, packed together into a matrix $Q$.  The keys and
 # values are also packed together into matrices $K$ and $V$.  We
@@ -427,7 +426,7 @@ show_example(example_mask)
 #    \mathrm{Attention}(Q, K, V) = \mathrm{softmax}(\frac{QK^T}{\sqrt{d_k}})V
 # $$
 
-# %% id="qsoVxS5yTsqG"
+# + id="qsoVxS5yTsqG"
 def attention(query, key, value, mask=None, dropout=None):
     "Compute 'Scaled Dot Product Attention'"
     d_k = query.size(-1)
@@ -440,8 +439,8 @@ def attention(query, key, value, mask=None, dropout=None):
     return torch.matmul(p_attn, value), p_attn
 
 
-# %% [markdown] id="jUkpwu8kTsqG"
-
+# + [markdown] id="jUkpwu8kTsqG"
+#
 # The two most commonly used attention functions are additive
 # attention [(cite)](https://arxiv.org/abs/1409.0473), and dot-product
 # (multiplicative) attention.  Dot-product attention is identical to
@@ -469,16 +468,16 @@ def attention(query, key, value, mask=None, dropout=None):
 #
 #
 
-# %% [markdown] id="bS1FszhVTsqG"
+# + [markdown] id="bS1FszhVTsqG"
 # ![](images/ModalNet-20.png)
 
 
-# %% [markdown] id="TNtVyZ-pTsqH"
-
+# + [markdown] id="TNtVyZ-pTsqH"
+#
 # Multi-head attention allows the model to jointly attend to
 # information from different representation subspaces at different
 # positions. With a single attention head, averaging inhibits this.
-
+#
 # $$
 # \mathrm{MultiHead}(Q, K, V) =
 #     \mathrm{Concat}(\mathrm{head_1}, ..., \mathrm{head_h})W^O \\
@@ -490,14 +489,14 @@ def attention(query, key, value, mask=None, dropout=None):
 # \mathbb{R}^{d_{\text{model}} \times d_k}$, $W^V_i \in
 # \mathbb{R}^{d_{\text{model}} \times d_v}$ and $W^O \in
 # \mathbb{R}^{hd_v \times d_{\text{model}}}$.
-
+#
 # In this work we employ $h=8$ parallel attention layers, or
 # heads. For each of these we use $d_k=d_v=d_{\text{model}}/h=64$. Due
 # to the reduced dimension of each head, the total computational cost
 # is similar to that of single-head attention with full
 # dimensionality.
 
-# %% id="D2LBMKCQTsqH"
+# + id="D2LBMKCQTsqH"
 class MultiHeadedAttention(nn.Module):
     def __init__(self, h, d_model, dropout=0.1):
         "Take in model size and number of heads."
@@ -537,9 +536,9 @@ class MultiHeadedAttention(nn.Module):
         return self.linears[-1](x)
 
 
-# %% [markdown] id="EDRba3J3TsqH"
+# + [markdown] id="EDRba3J3TsqH"
 # ### Applications of Attention in our Model
-
+#
 # The Transformer uses multi-head attention in three different ways:
 # 1) In "encoder-decoder attention" layers, the queries come from the
 # previous decoder layer, and the memory keys and values come from the
@@ -564,7 +563,7 @@ class MultiHeadedAttention(nn.Module):
 # by masking out (setting to $-\infty$) all values in the input of the
 # softmax which correspond to illegal connections.
 
-# %% [markdown] id="M-en97_GTsqH"
+# + [markdown] id="M-en97_GTsqH"
 # ## Position-wise Feed-Forward Networks
 #
 # In addition to attention sub-layers, each of the layers in our
@@ -582,7 +581,7 @@ class MultiHeadedAttention(nn.Module):
 # $d_{\text{model}}=512$, and the inner-layer has dimensionality
 # $d_{ff}=2048$.
 
-# %% id="6HHCemCxTsqH"
+# + id="6HHCemCxTsqH"
 class PositionwiseFeedForward(nn.Module):
     "Implements FFN equation."
 
@@ -596,9 +595,9 @@ class PositionwiseFeedForward(nn.Module):
         return self.w_2(self.dropout(self.w_1(x).relu()))
 
 
-# %% [markdown] id="dR1YM520TsqH"
+# + [markdown] id="dR1YM520TsqH"
 # ## Embeddings and Softmax
-
+#
 # Similarly to other sequence transduction models, we use learned
 # embeddings to convert the input tokens and output tokens to vectors
 # of dimension $d_{\text{model}}$.  We also use the usual learned
@@ -609,7 +608,7 @@ class PositionwiseFeedForward(nn.Module):
 # [(cite)](https://arxiv.org/abs/1608.05859). In the embedding layers,
 # we multiply those weights by $\sqrt{d_{\text{model}}}$.
 
-# %% id="pyrChq9qTsqH"
+# + id="pyrChq9qTsqH"
 class Embeddings(nn.Module):
     def __init__(self, d_model, vocab):
         super(Embeddings, self).__init__()
@@ -620,9 +619,9 @@ class Embeddings(nn.Module):
         return self.lut(x) * math.sqrt(self.d_model)
 
 
-# %% [markdown] id="vOkdui-cTsqH"
+# + [markdown] id="vOkdui-cTsqH"
 # ## Positional Encoding
-
+#
 # Since our model contains no recurrence and no convolution, in order
 # for the model to make use of the order of the sequence, we must
 # inject some information about the relative or absolute position of
@@ -634,11 +633,11 @@ class Embeddings(nn.Module):
 # [(cite)](https://arxiv.org/pdf/1705.03122.pdf).
 #
 # In this work, we use sine and cosine functions of different frequencies:
-
+#
 # $$PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}})$$
 #
 # $$PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})$$
-
+#
 # where $pos$ is the position and $i$ is the dimension.  That is, each
 # dimension of the positional encoding corresponds to a sinusoid.  The
 # wavelengths form a geometric progression from $2\pi$ to $10000 \cdot
@@ -653,7 +652,7 @@ class Embeddings(nn.Module):
 #
 #
 
-# %% id="zaHGD4yJTsqH"
+# + id="zaHGD4yJTsqH"
 class PositionalEncoding(nn.Module):
     "Implement the PE function."
 
@@ -677,13 +676,13 @@ class PositionalEncoding(nn.Module):
         return self.dropout(x)
 
 
-# %% [markdown] id="EfHacTJLTsqH"
-
+# + [markdown] id="EfHacTJLTsqH"
+#
 # > Below the positional encoding will add in a sine wave based on
 # > position. The frequency and offset of the wave is different for
 # > each dimension.
 
-# %% id="rnvHk_1QokC6" type="example"
+# + id="rnvHk_1QokC6" type="example"
 def example_positional():
     pe = PositionalEncoding(20, 0)
     y = pe.forward(torch.zeros(1, 100, 20))
@@ -711,8 +710,8 @@ def example_positional():
 
 show_example(example_positional)
 
-# %% [markdown] id="g8rZNCrzTsqI"
-
+# + [markdown] id="g8rZNCrzTsqI"
+#
 # We also experimented with using learned positional embeddings
 # [(cite)](https://arxiv.org/pdf/1705.03122.pdf) instead, and found
 # that the two versions produced nearly identical results.  We chose
@@ -720,12 +719,12 @@ show_example(example_positional)
 # to sequence lengths longer than the ones encountered during
 # training.
 
-# %% [markdown] id="iwNKCzlyTsqI"
+# + [markdown] id="iwNKCzlyTsqI"
 # ## Full Model
 #
 # > Here we define a function from hyperparameters to a full model.
 
-# %% id="mPe1ES0UTsqI"
+# + id="mPe1ES0UTsqI"
 
 
 def make_model(
@@ -752,27 +751,27 @@ def make_model(
     return model
 
 
-# %% id="azdUh766TsqI"
+# + id="azdUh766TsqI"
 # Small example model.
 tmp_model = make_model(10, 10, 2)
 
 
-# %% [markdown] id="05s6oT9fTsqI"
+# + [markdown] id="05s6oT9fTsqI"
 # # Training
 #
 # This section describes the training regime for our models.
 
-# %% [markdown] id="fTxlofs4TsqI"
-
+# + [markdown] id="fTxlofs4TsqI"
+#
 # > We stop for a quick interlude to introduce some of the tools
 # > needed to train a standard encoder decoder model. First we define a
 # > batch object that holds the src and target sentences for training,
 # > as well as constructing the masks.
 
-# %% [markdown] id="G7SkCenXTsqI"
+# + [markdown] id="G7SkCenXTsqI"
 # ## Batches and Masking
 
-# %% id="OJ4VDeQkTsqI"
+# + id="OJ4VDeQkTsqI"
 class Batch:
     "Object for holding a batch of data with mask during training."
 
@@ -795,16 +794,16 @@ class Batch:
         return tgt_mask
 
 
-# %% [markdown] id="cKkw5GjLTsqI"
-
+# + [markdown] id="cKkw5GjLTsqI"
+#
 # > Next we create a generic training and scoring function to keep
 # > track of loss. We pass in a generic loss compute function that
 # > also handles parameter updates.
 
-# %% [markdown] id="Q8zzeUc0TsqJ"
+# + [markdown] id="Q8zzeUc0TsqJ"
 # ## Training Loop
 
-# %% id="2HAZD3hiTsqJ"
+# + id="2HAZD3hiTsqJ"
 def run_epoch(data_iter, model, loss_compute):
     "Standard Training and Logging Function"
     start = time.time()
@@ -830,7 +829,7 @@ def run_epoch(data_iter, model, loss_compute):
     return total_loss / total_tokens
 
 
-# %% [markdown] id="aB1IF0foTsqJ"
+# + [markdown] id="aB1IF0foTsqJ"
 # ## Training Data and Batching
 #
 # We trained on the standard WMT 2014 English-German dataset
@@ -845,14 +844,14 @@ def run_epoch(data_iter, model, loss_compute):
 # Each training batch contained a set of sentence pairs containing
 # approximately 25000 source tokens and 25000 target tokens.
 
-# %% [markdown] id="J0w5i6oHTsqJ"
-
+# + [markdown] id="J0w5i6oHTsqJ"
+#
 # > We will use torch text for batching. This is discussed in more
 # > detail below. Here we create batches in a torchtext function that
 # > ensures our batch size padded to the maximum batchsize does not
 # > surpass a threshold (25000 if we have 8 gpus).
 
-# %% id="AdVWZ0Q2okC7"
+# + id="AdVWZ0Q2okC7"
 global max_src_in_batch, max_tgt_in_batch
 
 
@@ -871,9 +870,9 @@ def batch_size_fn(new, count, sofar):
     return max(src_elements, tgt_elements)
 
 
-# %% [markdown] id="F1mTQatiTsqJ" jp-MarkdownHeadingCollapsed=true tags=[]
+# + [markdown] id="F1mTQatiTsqJ" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Hardware and Schedule
-
+#
 # We trained our models on one machine with 8 NVIDIA P100 GPUs.  For
 # our base models using the hyperparameters described throughout the
 # paper, each training step took about 0.4 seconds.  We trained the
@@ -881,36 +880,36 @@ def batch_size_fn(new, count, sofar):
 # models, step time was 1.0 seconds.  The big models were trained for
 # 300,000 steps (3.5 days).
 
-# %% [markdown] id="-utZeuGcTsqJ"
+# + [markdown] id="-utZeuGcTsqJ"
 # ## Optimizer
 #
 # We used the Adam optimizer [(cite)](https://arxiv.org/abs/1412.6980)
 # with $\beta_1=0.9$, $\beta_2=0.98$ and $\epsilon=10^{-9}$.  We
 # varied the learning rate over the course of training, according to
 # the formula:
-
+#
 # $$
 # lrate = d_{\text{model}}^{-0.5} \cdot
 #   \min({step\_num}^{-0.5},
 #     {step\_num} \cdot {warmup\_steps}^{-1.5})
 # $$
-
+#
 # This corresponds to increasing the learning rate linearly for the
 # first $warmup\_steps$ training steps, and decreasing it thereafter
 # proportionally to the inverse square root of the step number.  We
 # used $warmup\_steps=4000$.
 
-# %% [markdown] id="39FbYnt-TsqJ"
-
+# + [markdown] id="39FbYnt-TsqJ"
+#
 # > Note: This part is very important. Need to train with this setup
 # > of the model.
 
-# %% [markdown] id="hlbojFkjTsqJ"
-
+# + [markdown] id="hlbojFkjTsqJ"
+#
 # > Example of the curves of this model for different model sizes and
 # > for optimization hyperparameters.
 
-# %% id="zUz3PdAnVg4o"
+# + id="zUz3PdAnVg4o"
 def rate(step, model_size, factor, warmup):
     """
     we have to default the step to 1 for LambdaLR function
@@ -923,7 +922,7 @@ def rate(step, model_size, factor, warmup):
     )
 
 
-# %% id="l1bnrlnSV8J5"
+# + id="l1bnrlnSV8J5"
 
 
 def example_train():
@@ -985,7 +984,7 @@ def example_train():
 
 show_example(example_train)
 
-# %% [markdown] id="7T1uD15VTsqK"
+# + [markdown] id="7T1uD15VTsqK"
 # ## Regularization
 #
 # ### Label Smoothing
@@ -995,14 +994,14 @@ show_example(example_train)
 # This hurts perplexity, as the model learns to be more unsure, but
 # improves accuracy and BLEU score.
 
-# %% [markdown] id="kNoAVD8bTsqK"
-
+# + [markdown] id="kNoAVD8bTsqK"
+#
 # > We implement label smoothing using the KL div loss. Instead of
 # > using a one-hot target distribution, we create a distribution that
 # > has `confidence` of the correct word and the rest of the
 # > `smoothing` mass distributed throughout the vocabulary.
 
-# %% id="shU2GyiETsqK"
+# + id="shU2GyiETsqK"
 
 
 class LabelSmoothing(nn.Module):
@@ -1030,12 +1029,12 @@ class LabelSmoothing(nn.Module):
         return self.criterion(x, true_dist.clone().detach())
 
 
-# %% [markdown] id="jCxUrlUyTsqK"
-
+# + [markdown] id="jCxUrlUyTsqK"
+#
 # > Here we can see an example of how the mass is distributed to the
 # > words based on confidence.
 
-# %% id="EZtKaaQNTsqK"
+# + id="EZtKaaQNTsqK"
 # Example of label smoothing.
 
 
@@ -1077,12 +1076,12 @@ def example_label_smoothing():
 
 show_example(example_label_smoothing)
 
-# %% [markdown] id="CGM8J1veTsqK"
-
+# + [markdown] id="CGM8J1veTsqK"
+#
 # > Label smoothing actually starts to penalize the model if it gets
 # > very confident about a given choice.
 
-# %% id="78EHzLP7TsqK"
+# + id="78EHzLP7TsqK"
 crit = LabelSmoothing(5, 0, 0.1)
 
 
@@ -1110,17 +1109,17 @@ def example_label_smoothing2():
 
 show_example(example_label_smoothing2)
 
-# %% [markdown] id="67lUqeLXTsqK"
+# + [markdown] id="67lUqeLXTsqK"
 # # A First  Example
 #
 # > We can begin by trying out a simple copy-task. Given a random set
 # > of input symbols from a small vocabulary, the goal is to generate
 # > back those same symbols.
 
-# %% [markdown] id="jJa-89_pTsqK"
+# + [markdown] id="jJa-89_pTsqK"
 # ## Synthetic Data
 
-# %% id="g1aTxeqqTsqK"
+# + id="g1aTxeqqTsqK"
 
 
 def data_gen(V, batch, nbatches):
@@ -1133,10 +1132,10 @@ def data_gen(V, batch, nbatches):
         yield Batch(src, tgt, 0)
 
 
-# %% [markdown] id="XTXwD9hUTsqK"
+# + [markdown] id="XTXwD9hUTsqK"
 # ## Loss Computation
 
-# %% id="3J8EJm87TsqK"
+# + id="3J8EJm87TsqK"
 class SimpleLossCompute:
     "A simple loss compute and train function."
 
@@ -1163,12 +1162,12 @@ class SimpleLossCompute:
         return sloss.data * norm
 
 
-# %% [markdown] id="eDAI7ELUTsqL"
+# + [markdown] id="eDAI7ELUTsqL"
 # ## Greedy Decoding
 
-# %% [markdown] id="LFkWakplTsqL"
+# + [markdown] id="LFkWakplTsqL"
 # > This code predicts a translation using greedy decoding for simplicity.
-# %% id="N2UOpnT3bIyU"
+# + id="N2UOpnT3bIyU"
 
 
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
@@ -1187,7 +1186,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
     return ys
 
 
-# %% id="qgIZ2yEtdYwe"
+# + id="qgIZ2yEtdYwe"
 # Train the simple copy task.
 
 
@@ -1232,7 +1231,7 @@ def example_simple_model():
 
 train_example(example_simple_model)
 
-# %% [markdown] id="OpuQv2GsTsqL"
+# + [markdown] id="OpuQv2GsTsqL"
 # # A Real World Example
 #
 # > Now we consider a real-world example using the IWSLT
@@ -1241,13 +1240,13 @@ train_example(example_simple_model)
 # > system. We also show how to use multi-gpu processing to make it
 # > really fast.
 
-# %% [markdown] id="8y9dpfolTsqL" tags=[]
+# + [markdown] id="8y9dpfolTsqL" tags=[]
 # ## Data Loading
-
+#
 # > We will load the dataset using torchtext and spacy for
 # > tokenization.
 
-# %% id="t4BszXXJTsqL" tags=[]
+# + id="t4BszXXJTsqL" tags=[]
 
 
 def tokenize_de(text):
@@ -1263,7 +1262,7 @@ def yield_tokens(data_iter, tokenizer, index):
         yield tokenizer(from_to_tuple[index])
 
 
-# %% id="jU3kVlV5okC-" tags=[]
+# + id="jU3kVlV5okC-" tags=[]
 print("Building German Vocabulary ...")
 
 spacy_de = spacy.load("de_core_news_sm")
@@ -1291,18 +1290,18 @@ print("Finished. Vocabulary sizes are:")
 print(len(vocab_src))
 print(len(vocab_tgt))
 
-# %% [markdown] id="-l-TFwzfTsqL"
-
+# + [markdown] id="-l-TFwzfTsqL"
+#
 # > Batching matters a ton for speed. We want to have very evenly
 # > divided batches, with absolutely minimal padding. To do this we
 # > have to hack a bit around the default torchtext batching. This
 # > code patches their default batching to make sure we search over
 # > enough sentences to find tight batches.
 
-# %% [markdown] id="kDEj-hCgokC-" tags=[] jp-MarkdownHeadingCollapsed=true
+# + [markdown] id="kDEj-hCgokC-" tags=[] jp-MarkdownHeadingCollapsed=true
 # ## Iterators
 
-# %% id="wGsIHFgOokC_" tags=[]
+# + id="wGsIHFgOokC_" tags=[]
 
 
 def collate_batch(
@@ -1343,7 +1342,7 @@ def collate_batch(
     return src.to(device), tgt.to(device)
 
 
-# %% id="ka2Ce_WIokC_"
+# + id="ka2Ce_WIokC_"
 def create_dataloaders(devices, batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
@@ -1368,30 +1367,31 @@ def create_dataloaders(devices, batch_size=12000):
     return train_dataloader, valid_dataloader
 
 
-# %% id="EvDvTfXtTsqM" tags=[]
+# + id="EvDvTfXtTsqM" tags=[]
 
 
-# %% [markdown] id="n-aVUlpjTsqM"
 
+# + [markdown] id="n-aVUlpjTsqM"
+#
 # > Now we train the model. I will play with the warmup steps a bit,
 # > but everything else uses the default parameters.  On an AWS
 # > p3.8xlarge with 4 Tesla V100s, this runs at ~27,000 tokens per
 # > second with a batch size of 12,000
 
-# %% [markdown] id="90qM8RzCTsqM"
+# + [markdown] id="90qM8RzCTsqM"
 # ## Training the System
 
-# %% id="Kx53VVTgTsqM" tags=[]
+# + id="Kx53VVTgTsqM" tags=[]
 # #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 
-# %% id="9hR8Rvx-okDA"
+# + id="9hR8Rvx-okDA"
 def rebatch(pad_idx, batch):
     "Fix order in torchtext to match ours"
     src, tgt = batch[0], batch[1]
     return Batch(src, tgt, pad_idx)
 
 
-# %% id="jZeYHJcdTsqN"
+# + id="jZeYHJcdTsqN"
 create_model = False
 devices = range(torch.cuda.device_count())
 
@@ -1439,14 +1439,14 @@ if create_model:
 else:
     model = torch.load("iwslt.pt")
 
-# %% [markdown] id="RZK_VjDPTsqN"
-
+# + [markdown] id="RZK_VjDPTsqN"
+#
 # > Once trained we can decode the model to produce a set of
 # > translations. Here we simply translate the first sentence in the
 # > validation set. This dataset is pretty small so the translations
 # > with greedy search are reasonably accurate.
 
-# %% id="f0mNHT4iTsqN"
+# + id="f0mNHT4iTsqN"
 # for i, batch in enumerate(valid_iter):
 #     src = batch.src.transpose(0, 1)[:1]
 #     src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
@@ -1469,11 +1469,11 @@ else:
 #     print()
 #     break
 
-# %% [markdown] id="L50i0iEXTsqN"
+# + [markdown] id="L50i0iEXTsqN"
 # # Additional Components: BPE, Search, Averaging
 
-# %% [markdown] id="NBx1C2_NTsqN"
-
+# + [markdown] id="NBx1C2_NTsqN"
+#
 # > So this mostly covers the transformer model itself. There are four
 # > aspects that we didn't cover explicitly. We also have all these
 # > additional features implemented in
@@ -1481,33 +1481,33 @@ else:
 #
 #
 
-# %% [markdown] id="UpqV1mWnTsqN"
-
+# + [markdown] id="UpqV1mWnTsqN"
+#
 # > 1) BPE/ Word-piece: We can use a library to first preprocess the
 # > data into subword units. See Rico Sennrich's
 # > [subword-nmt](https://github.com/rsennrich/subword-nmt)
 # > implementation. These models will transform the training data to
 # > look like this:
 
-# %% [markdown] id="hwJ_9J0BTsqN"
+# + [markdown] id="hwJ_9J0BTsqN"
 # ▁Die ▁Protokoll datei ▁kann ▁ heimlich ▁per ▁E - Mail ▁oder ▁FTP
 # ▁an ▁einen ▁bestimmte n ▁Empfänger ▁gesendet ▁werden .
 
-# %% [markdown] id="9HwejYkpTsqN"
-
+# + [markdown] id="9HwejYkpTsqN"
+#
 # > 2) Shared Embeddings: When using BPE with shared vocabulary we can
 # > share the same weight vectors between the source / target /
 # > generator. See the [(cite)](https://arxiv.org/abs/1608.05859) for
 # > details. To add this to the model simply do this:
 
-# %% id="tb3j3CYLTsqN" tags=[]
+# + id="tb3j3CYLTsqN" tags=[]
 if False:
     model.src_embed[0].lut.weight = model.tgt_embeddings[0].lut.weight
     model.generator.lut.weight = model.tgt_embed[0].lut.weight
 
 
-# %% [markdown] id="xDKJsSwRTsqN"
-
+# + [markdown] id="xDKJsSwRTsqN"
+#
 # > 3) Beam Search: This is a bit too complicated to cover here. See
 # > the [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/blob/
 #
@@ -1515,20 +1515,20 @@ if False:
 #
 #
 
-# %% [markdown] id="wf3vVYGZTsqN"
-
+# + [markdown] id="wf3vVYGZTsqN"
+#
 # > 4) Model Averaging: The paper averages the last k checkpoints to
 # > create an ensembling effect. We can do this after the fact if we
 # > have a bunch of models:
 
-# %% id="hAFEa78JokDB"
+# + id="hAFEa78JokDB"
 def average(model, models):
     "Average models into model"
     for ps in zip(*[m.params() for m in [model] + models]):
         ps[0].copy_(torch.sum(*ps[1:]) / len(ps[1:]))
 
 
-# %% [markdown] id="Kz5BYJ9sTsqO"
+# + [markdown] id="Kz5BYJ9sTsqO"
 # # Results
 #
 # On the WMT 2014 English-to-German translation task, the big
@@ -1546,12 +1546,12 @@ def average(model, models):
 # previous state-of-the-art model. The Transformer (big) model trained
 # for English-to-French used dropout rate Pdrop = 0.1, instead of 0.3.
 #
+# -
 
-# %% [markdown]
 # ![](images/results.png)
 
-# %% [markdown] id="cPcnsHvQTsqO"
-
+# + [markdown] id="cPcnsHvQTsqO"
+#
 # > The code we have written here is a version of the base
 # > model. There are fully trained version of this system available
 # > here [(Example Models)](http://opennmt.net/Models-py/).
@@ -1560,10 +1560,10 @@ def average(model, models):
 # > replication gets to 26.9 on EN-DE WMT. Here I have loaded in those
 # > parameters to our reimplemenation.
 
-# %% id="LHLDc7enokDB"
+# + id="LHLDc7enokDB"
 # !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 
-# %% id="Y37eUkL-okDB"
+# + id="Y37eUkL-okDB"
 def example_greedy():
     model, SRC, TGT = torch.load("en-de-model.pt")
 
@@ -1590,14 +1590,14 @@ def example_greedy():
 
 show_example(example_greedy)
 
-# %% [markdown] id="0ZkkNTKLTsqO"
+# + [markdown] id="0ZkkNTKLTsqO"
 # ## Attention Visualization
 #
 # > Even with a greedy decoder the translation looks pretty good. We
 # > can further visualize it to see what is happening at each layer of
 # > the attention
 
-# %% id="6aS3Be3jokDB"
+# + id="6aS3Be3jokDB"
 
 
 def example_attention(model, tgt_sent):
@@ -1721,7 +1721,7 @@ def example_attention(model, tgt_sent):
 
 # show_example(example_attention, [model, trans.split()])
 
-# %% [markdown] id="nSseuCcATsqO"
+# + [markdown] id="nSseuCcATsqO"
 # # Conclusion
 #
 # > Hopefully this code is useful for future research. Please reach
@@ -1730,5 +1730,5 @@ def example_attention(model, tgt_sent):
 #
 # > Cheers,
 # > srush
-# %% [markdown]
+# -
 #
