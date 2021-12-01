@@ -6,7 +6,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.11.4
+#       jupytext_version: 1.13.0
 #   kernelspec:
 #     display_name: Python 3
 #     language: python
@@ -760,12 +760,14 @@ def make_model(
 tmp_model = make_model(11, 11, 2)
 
 # %% [markdown]
-# ## Inference: 
+# ## Inference:
 #
-# > Here we make a forward step to generate a prediction of the model. We try to use our 
-# transformer to memorize the input. As you will see the output is randomly generated due to the fact that the model
-# is not trained yet. In the next tutorial we will build the training function and try to train our model to memorize
-# the numbers from 1 to 10. 
+# > Here we make a forward step to generate a prediction of the
+# model. We try to use our transformer to memorize the input. As you
+# will see the output is randomly generated due to the fact that the
+# model is not trained yet. In the next tutorial we will build the
+# training function and try to train our model to memorize the numbers
+# from 1 to 10.
 
 # %%
 tmp_model.eval()
@@ -775,23 +777,22 @@ src_mask = torch.ones(1, 1, 10)
 memory = tmp_model.encode(src, src_mask)
 ys = torch.ones(1, 1).fill_(1).type_as(src)
 
-for i in range(10-1):
-    out = tmp_model.decode(memory, src_mask,
-                       ys,
-                       subsequent_mask(ys.size(1))
-                       .type_as(src.data))
+for i in range(10 - 1):
+    out = tmp_model.decode(
+        memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
+    )
     prob = tmp_model.generator(out[:, -1])
     _, next_word = torch.max(prob, dim=1)
     next_word = next_word.data[0]
-    ys = torch.cat([ys,
-                    torch.ones(1, 1).type_as(src.data)
-                    .fill_(next_word)], dim=1)
-    
-print("Untrained Model Prediction",ys)
+    ys = torch.cat(
+        [ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1
+    )
+
+print("Untrained Model Prediction", ys)
 
 
 # %% [markdown]
-# # Tutorial 2: Training 
+# # Tutorial 2: Training
 
 # %% [markdown] id="05s6oT9fTsqI"
 # # Training
@@ -1077,11 +1078,15 @@ class LabelSmoothing(nn.Module):
 
 def example_label_smoothing():
     crit = LabelSmoothing(5, 0, 0.4)
-    predict = torch.FloatTensor([[0, 0.2, 0.7, 0.1, 0],
-                                 [0, 0.2, 0.7, 0.1, 0],
-                                 [0, 0.2, 0.7, 0.1, 0],
-                                 [0, 0.2, 0.7, 0.1, 0],
-                                 [0, 0.2, 0.7, 0.1, 0]])
+    predict = torch.FloatTensor(
+        [
+            [0, 0.2, 0.7, 0.1, 0],
+            [0, 0.2, 0.7, 0.1, 0],
+            [0, 0.2, 0.7, 0.1, 0],
+            [0, 0.2, 0.7, 0.1, 0],
+            [0, 0.2, 0.7, 0.1, 0],
+        ]
+    )
     crit(x=predict.log(), target=torch.LongTensor([2, 1, 0, 3, 3]))
     LS_data = pd.concat(
         [
@@ -1187,7 +1192,8 @@ class SimpleLossCompute:
         sloss = (
             self.criterion(
                 x.contiguous().view(-1, x.size(-1)), y.contiguous().view(-1)
-            ) / norm
+            )
+            / norm
         )
         sloss.backward()
         if self.opt is not None:
@@ -1435,12 +1441,14 @@ if create_model:
     pad_idx = vocab_tgt["<blank>"]
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.cuda()
-    criterion = LabelSmoothing(size=len(vocab_tgt),
-                               padding_idx=pad_idx, smoothing=0.1)
+    criterion = LabelSmoothing(
+        size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
+    )
     criterion.cuda()
     BATCH_SIZE = 12000
-    train_dataloader, valid_dataloader = \
-        create_dataloaders(devices[0], BATCH_SIZE)
+    train_dataloader, valid_dataloader = create_dataloaders(
+        devices[0], BATCH_SIZE
+    )
 
     optimizer = torch.optim.Adam(
         model.parameters(), lr=1e-3, betas=(0.9, 0.98), eps=1e-9
@@ -1467,9 +1475,7 @@ if create_model:
         sloss = run_epoch(
             (rebatch(pad_idx, b) for b in valid_dataloader),
             model,
-            SimpleLossCompute(
-                model.generator, criterion, opt=None
-            ),
+            SimpleLossCompute(model.generator, criterion, opt=None),
         )
         print(sloss)
 else:
