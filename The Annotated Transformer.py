@@ -2,13 +2,14 @@
 # ---
 # jupyter:
 #   jupytext:
+#     formats: ipynb,py:percent
 #     text_representation:
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.0
+#       jupytext_version: 1.13.4
 #   kernelspec:
-#     display_name: Python 3
+#     display_name: Python 3 (ipykernel)
 #     language: python
 #     name: python3
 # ---
@@ -390,12 +391,11 @@ def example_mask():
         ]
     )
 
-    alt.Chart(LS_data).mark_rect().properties(height=250, width=250).encode(
+    return alt.Chart(LS_data).mark_rect().properties(height=250, width=250).encode(
         alt.X("Window:O"),
         alt.Y("Masking:O"),
         alt.Color("Subsequent Mask:Q", scale=alt.Scale(scheme="viridis")),
     )
-
 
 show_example(example_mask)
 
@@ -714,6 +714,7 @@ def example_positional():
 
 show_example(example_positional)
 
+
 # %% [markdown] id="g8rZNCrzTsqI"
 #
 # We also experimented with using learned positional embeddings
@@ -729,8 +730,6 @@ show_example(example_positional)
 # > Here we define a function from hyperparameters to a full model.
 
 # %% id="mPe1ES0UTsqI"
-
-
 def make_model(
     src_vocab, tgt_vocab, N=6, d_model=512, d_ff=2048, h=8, dropout=0.1
 ):
@@ -961,9 +960,7 @@ def rate(step, model_size, factor, warmup):
 
 
 # %% id="l1bnrlnSV8J5"
-
-
-def example_train():
+def example_learning_schedule():
     opts = [
         [512, 1, 4000],  # example 1
         [512, 1, 8000],  # example 2
@@ -1020,7 +1017,8 @@ def example_train():
     )
 
 
-show_example(example_train)
+show_example(example_learning_schedule)
+
 
 # %% [markdown] id="7T1uD15VTsqK"
 # ## Regularization
@@ -1040,8 +1038,6 @@ show_example(example_train)
 # > `smoothing` mass distributed throughout the vocabulary.
 
 # %% id="shU2GyiETsqK"
-
-
 class LabelSmoothing(nn.Module):
     "Implement label smoothing."
 
@@ -1135,7 +1131,7 @@ def loss(x):
 
 def example_label_smoothing2():
     loss_data = pd.DataFrame(
-        {"Loss": [loss(x) for x in range(1, 100)], "steps": list(range(99))}
+        {"Loss": [loss(x) for x in range(1, 100)], "Steps": list(range(99))}
     ).astype("float")
 
     return (
@@ -1143,13 +1139,14 @@ def example_label_smoothing2():
         .mark_line()
         .properties(width=350)
         .encode(
-            x="steps",
+            x="Steps",
             y="Loss",
         )
     )
 
 
 show_example(example_label_smoothing2)
+
 
 # %% [markdown] id="67lUqeLXTsqK"
 # # A First  Example
@@ -1162,8 +1159,6 @@ show_example(example_label_smoothing2)
 # ## Synthetic Data
 
 # %% id="g1aTxeqqTsqK"
-
-
 def data_gen(V, batch, nbatches):
     "Generate random data for a src-tgt copy task."
     for i in range(nbatches):
@@ -1197,11 +1192,10 @@ class SimpleLossCompute:
         )
         sloss.backward()
         if self.opt is not None:
-            self.opt.step()
-
-            self.opt.zero_grad()
-            if self.lr_scheduler:
-                self.lr_scheduler.step()
+           self.opt.step()
+           self.opt.zero_grad()
+           if self.lr_scheduler:
+               self.lr_scheduler.step()
         return sloss.data * norm
 
 
@@ -1211,8 +1205,6 @@ class SimpleLossCompute:
 # %% [markdown] id="LFkWakplTsqL"
 # > This code predicts a translation using greedy decoding for simplicity.
 # %% id="N2UOpnT3bIyU"
-
-
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
@@ -1239,7 +1231,7 @@ def example_simple_model():
     model = make_model(V, V, N=2)
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=1e-4, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
@@ -1275,13 +1267,22 @@ def example_simple_model():
 train_example(example_simple_model)
 
 # %% [markdown] id="OpuQv2GsTsqL"
-# # A Real World Example
+# # Tutorial 3: A Real World Example
 #
 # > Now we consider a real-world example using the IWSLT
 # > German-English Translation task. This task is much smaller than
 # > the WMT task considered in the paper, but it illustrates the whole
 # > system. We also show how to use multi-gpu processing to make it
 # > really fast.
+
+# %%
+# !which python
+
+# %%
+# These only need to be run once to download english/german language models with spacy.
+
+# # !python -m spacy download en
+# # !python -m spacy download de
 
 # %% [markdown] id="8y9dpfolTsqL" tags=[]
 # ## Data Loading
@@ -1329,7 +1330,7 @@ vocab_tgt = build_vocab_from_iterator(
 vocab_src.set_default_index(vocab_src["<unk>"])
 vocab_tgt.set_default_index(vocab_tgt["<unk>"])
 
-print("Finished. Vocabulary sizes are:")
+print("Finished.\nVocabulary sizes:")
 print(len(vocab_src))
 print(len(vocab_tgt))
 
@@ -1410,9 +1411,6 @@ def create_dataloaders(devices, batch_size=12000):
     return train_dataloader, valid_dataloader
 
 
-# %% id="EvDvTfXtTsqM" tags=[]
-
-
 # %% [markdown] id="n-aVUlpjTsqM"
 #
 # > Now we train the model. I will play with the warmup steps a bit,
@@ -1433,30 +1431,29 @@ def rebatch(pad_idx, batch):
     return Batch(src, tgt, pad_idx)
 
 
-# %% id="jZeYHJcdTsqN"
-create_model = False
-devices = range(torch.cuda.device_count())
-
-if create_model:
+# %%
+def train_model(vocab_src, vocab_tgt, devices):
     pad_idx = vocab_tgt["<blank>"]
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    d_model = 512
     model.cuda()
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda()
-    BATCH_SIZE = 12000
+    # BATCH_SIZE = 12000
+    BATCH_SIZE = 1 # for debugging
     train_dataloader, valid_dataloader = create_dataloaders(
-        devices[0], BATCH_SIZE
+        devices, BATCH_SIZE
     )
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=1e-3, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
         lr_lambda=lambda step: rate(
-            step, model.parameters(), factor=1, warmup=2000
+            step, d_model, factor=1, warmup=2000
         ),
     )
     for epoch in range(10):
@@ -1477,7 +1474,16 @@ if create_model:
             model,
             SimpleLossCompute(model.generator, criterion, opt=None),
         )
-        print(sloss)
+        print(sloss) 
+    return model
+
+
+# %% id="jZeYHJcdTsqN"
+create_model = True
+devices = range(torch.cuda.device_count())
+
+if create_model:
+    model = train_model(vocab_src, vocab_tgt, devices)
 else:
     model = torch.load("iwslt.pt")
 
