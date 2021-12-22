@@ -14,10 +14,10 @@
 #     name: python3
 # ---
 
-# %% [markdown]
+# %% [markdown] tags=[]
 # ![Main Figure](images/aiayn.png)
 
-# %% [markdown] id="SX7UC-8jTsp7"
+# %% [markdown] id="SX7UC-8jTsp7" tags=[]
 #
 # The Transformer from ["Attention is All You
 # Need"](https://arxiv.org/abs/1706.03762) has been on a lot of
@@ -851,7 +851,7 @@ def run_epoch(data_iter, model, loss_compute):
         out = model.forward(
             batch.src, batch.tgt, batch.src_mask, batch.tgt_mask
         )
-        loss = loss_compute(out, batch.tgt_y, batch.ntokens)
+        loss = float(loss_compute(out, batch.tgt_y, batch.ntokens))
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
@@ -959,7 +959,7 @@ def rate(step, model_size, factor, warmup):
     )
 
 
-# %% id="l1bnrlnSV8J5"
+# %% id="l1bnrlnSV8J5" tags=[]
 def example_learning_schedule():
     opts = [
         [512, 1, 4000],  # example 1
@@ -1264,7 +1264,7 @@ def example_simple_model():
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
 
 
-train_example(example_simple_model)
+# train_example(example_simple_model)
 
 # %% [markdown] id="OpuQv2GsTsqL"
 # # Tutorial 3: A Real World Example
@@ -1274,9 +1274,6 @@ train_example(example_simple_model)
 # > the WMT task considered in the paper, but it illustrates the whole
 # > system. We also show how to use multi-gpu processing to make it
 # > really fast.
-
-# %%
-# !which python
 
 # %%
 # These only need to be run once to download english/german language models with spacy.
@@ -1307,11 +1304,10 @@ def yield_tokens(data_iter, tokenizer, index):
 
 
 # %% id="jU3kVlV5okC-" tags=[]
-print("Building German Vocabulary ...")
-
 spacy_de = spacy.load("de_core_news_sm")
 spacy_en = spacy.load("en_core_web_sm")
 
+print("Building German Vocabulary ...")
 train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
 vocab_src = build_vocab_from_iterator(
     yield_tokens(train + val + test, tokenize_de, index=0),
@@ -1387,10 +1383,10 @@ def collate_batch(
 
 
 # %% id="ka2Ce_WIokC_"
-def create_dataloaders(devices, batch_size=12000):
+def create_dataloaders(device, batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
-            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, devices[0]
+            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device
         )
 
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
@@ -1432,7 +1428,7 @@ def rebatch(pad_idx, batch):
 
 
 # %%
-def train_model(vocab_src, vocab_tgt, devices):
+def train_model(vocab_src, vocab_tgt, device, batch_size=12000, num_epochs=10):
     pad_idx = vocab_tgt["<blank>"]
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     d_model = 512
@@ -1441,10 +1437,8 @@ def train_model(vocab_src, vocab_tgt, devices):
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda()
-    # BATCH_SIZE = 12000
-    BATCH_SIZE = 1 # for debugging
     train_dataloader, valid_dataloader = create_dataloaders(
-        devices, BATCH_SIZE
+        device, batch_size=batch_size
     )
 
     optimizer = torch.optim.Adam(
@@ -1456,7 +1450,7 @@ def train_model(vocab_src, vocab_tgt, devices):
             step, d_model, factor=1, warmup=2000
         ),
     )
-    for epoch in range(10):
+    for epoch in range(num_epochs):
         model.train()
         run_epoch(
             (rebatch(pad_idx, b) for b in train_dataloader),
@@ -1478,14 +1472,17 @@ def train_model(vocab_src, vocab_tgt, devices):
     return model
 
 
-# %% id="jZeYHJcdTsqN"
+# %% id="jZeYHJcdTsqN" tags=[]
 create_model = True
 devices = range(torch.cuda.device_count())
 
 if create_model:
-    model = train_model(vocab_src, vocab_tgt, devices)
+    model = train_model(vocab_src, vocab_tgt, devices[0], batch_size=16, num_epochs=1)
 else:
     model = torch.load("iwslt.pt")
+
+# %%
+3
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
@@ -1493,6 +1490,32 @@ else:
 # > translations. Here we simply translate the first sentence in the
 # > validation set. This dataset is pretty small so the translations
 # > with greedy search are reasonably accurate.
+
+# %%
+model([3], [3], [1], [1])
+
+# %% id="f0mNHT4iTsqN"
+# for i, batch in enumerate(valid_iter):
+#     src = batch.src.transpose(0, 1)[:1]
+#     src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
+#     out = greedy_decode(
+#         model, src, src_mask, max_len=60, start_symbol=TGT.vocab.stoi["<s>"]
+#     )
+#     print("Translation:", end="\t")
+#     for i in range(1, out.size(1)):
+#         sym = TGT.vocab.itos[out[0, i]]
+#         if sym == "</s>":
+#             break
+#         print(sym, end=" ")
+#     print()
+#     print("Target:", end="\t")
+#     for i in range(1, batch.tgt.size(0)):
+#         sym = TGT.vocab.itos[batch.tgt.data[i, 0]]
+#         if sym == "</s>":
+#             break
+#         print(sym, end=" ")
+#     print()
+#     break
 
 # %% id="f0mNHT4iTsqN"
 # for i, batch in enumerate(valid_iter):
