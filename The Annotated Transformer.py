@@ -84,20 +84,25 @@ def show_example(fn, args=[]):
 
 def train_example(fn, args=[]):
     fn(*args)
-    
+
+
 class NoopOptimizer(torch.optim.Optimizer):
     def __init__(self):
         None
+
     def step(self):
         None
+
     def zero_grad(self, set_to_none=False):
         None
-        
+
+
 class NoopScheduler:
     def __init__(self):
         None
+
     def step(self):
-        None    
+        None
 
 
 # %% [markdown] id="RSntDwKhTsp-"
@@ -405,11 +410,17 @@ def example_mask():
         ]
     )
 
-    return alt.Chart(LS_data).mark_rect().properties(height=250, width=250).encode(
-        alt.X("Window:O"),
-        alt.Y("Masking:O"),
-        alt.Color("Subsequent Mask:Q", scale=alt.Scale(scheme="viridis")),
+    return (
+        alt.Chart(LS_data)
+        .mark_rect()
+        .properties(height=250, width=250)
+        .encode(
+            alt.X("Window:O"),
+            alt.Y("Masking:O"),
+            alt.Color("Subsequent Mask:Q", scale=alt.Scale(scheme="viridis")),
+        )
     )
+
 
 show_example(example_mask)
 
@@ -866,7 +877,9 @@ class Batch:
 # ## Training Loop
 
 # %% id="2HAZD3hiTsqJ"
-def run_epoch(data_iter, model, loss_compute, optimizer, scheduler, accum_iter=1):
+def run_epoch(
+    data_iter, model, loss_compute, optimizer, scheduler, accum_iter=1
+):
     "Standard Training and Logging Function"
     start = time.time()
     total_tokens = 0
@@ -874,16 +887,17 @@ def run_epoch(data_iter, model, loss_compute, optimizer, scheduler, accum_iter=1
     tokens = 0
     for i, batch in enumerate(data_iter):
         out = model.forward(
-            batch.src, batch.tgt, batch.src_mask, batch.tgt_mask)
-        loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)  
+            batch.src, batch.tgt, batch.src_mask, batch.tgt_mask
+        )
+        loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
         # loss_node = loss_node / accum_iter
         loss_node.backward()
         if i % accum_iter == 0:
             print("Accumulating gradients")
             optimizer.step()
             optimizer.zero_grad(set_to_none=True)
-            scheduler.step()        
-        
+            scheduler.step()
+
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
@@ -897,7 +911,7 @@ def run_epoch(data_iter, model, loss_compute, optimizer, scheduler, accum_iter=1
             tokens = 0
         del loss
         del loss_node
-    torch.cuda.empty_cache()            
+    torch.cuda.empty_cache()
     return total_loss / total_tokens
 
 
@@ -1051,6 +1065,7 @@ def example_learning_schedule():
         .encode(x="step", y="Learning Rate", color="model_size:warmup:N")
     )
 
+
 # example_learning_schedule()
 
 
@@ -1172,10 +1187,7 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(
-            x="Steps",
-            y="Loss",
-        )
+        .encode(x="Steps", y="Loss",)
     )
 
 
@@ -1270,9 +1282,7 @@ def example_simple_model():
         run_epoch(
             data_gen(V, 30, 20),
             model,
-            SimpleLossCompute(
-                model.generator, criterion
-            ),
+            SimpleLossCompute(model.generator, criterion),
             optimizer,
             lr_scheduler,
         )
@@ -1283,7 +1293,7 @@ def example_simple_model():
                 model,
                 SimpleLossCompute(model.generator, criterion),
                 NoopOptimizer(),
-                NoopScheduler()
+                NoopScheduler(),
             )
         )
 
@@ -1291,6 +1301,7 @@ def example_simple_model():
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
+
 
 # train_example(example_simple_model)
 
@@ -1304,7 +1315,8 @@ def example_simple_model():
 # > really fast.
 
 # %%
-# These only need to be run once to download english/german language models with spacy.
+# These only need to be run once to download
+# english/german language models with spacy.
 
 # # !python -m spacy download en
 # # !python -m spacy download de
@@ -1412,7 +1424,7 @@ def collate_batch(
 
 # %% id="ka2Ce_WIokC_" tags=[]
 def create_dataloaders(device, batch_size=12000):
-# def create_dataloaders(batch_size=12000):
+    # def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
             batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device
@@ -1425,13 +1437,13 @@ def create_dataloaders(device, batch_size=12000):
         to_map_style_dataset(train_iter),
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
     )
     valid_dataloader = DataLoader(
         to_map_style_dataset(valid_iter),
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_fn
+        collate_fn=collate_fn,
     )
     return train_dataloader, valid_dataloader
 
@@ -1457,7 +1469,14 @@ def rebatch(pad_idx, batch):
 
 
 # %%
-def train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, accum_iter=12000 / 64):
+def train_model(
+    vocab_src,
+    vocab_tgt,
+    devices,
+    batch_size=64,
+    num_epochs=10,
+    accum_iter=12000 / 64,
+):
     pad_idx = vocab_tgt["<blank>"]
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model = nn.DataParallel(model_init, device_ids=devices)
@@ -1469,7 +1488,8 @@ def train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, acc
     criterion.cuda()
     train_dataloader, valid_dataloader = create_dataloaders(
         # batch_size=batch_size
-        devices[0], batch_size=batch_size
+        devices[0],
+        batch_size=batch_size,
     )
 
     optimizer = torch.optim.Adam(
@@ -1477,22 +1497,17 @@ def train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, acc
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
-        lr_lambda=lambda step: rate(
-            step, d_model, factor=1, warmup=2000
-        ),
+        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=2000),
     )
     for epoch in range(num_epochs):
         model.train()
         run_epoch(
             (rebatch(pad_idx, b) for b in train_dataloader),
             model,
-            SimpleLossCompute(
-                model_init.generator,
-                criterion
-            ),
+            SimpleLossCompute(model_init.generator, criterion),
             optimizer,
             lr_scheduler,
-            accum_iter
+            accum_iter,
         )
         model.eval()
         sloss = run_epoch(
@@ -1500,9 +1515,9 @@ def train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, acc
             model,
             SimpleLossCompute(model_init.generator, criterion),
             NoopOptimizer(),
-            NoopScheduler()
+            NoopScheduler(),
         )
-        print(sloss) 
+        print(sloss)
     return model
 
 
@@ -1512,17 +1527,19 @@ devices = range(torch.cuda.device_count())
 
 if create_model:
     # effective batch size = accum_iter x batch_size
-    model = train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, accum_iter=50)
+    model = train_model(
+        vocab_src,
+        vocab_tgt,
+        devices,
+        batch_size=64,
+        num_epochs=10,
+        accum_iter=50,
+    )
 else:
     model = torch.load("iwslt.pt")
 
 # %%
 torch.cuda.empty_cache()
-
-# %%
-train_dataloader, valid_dataloader = create_dataloaders(
-        devices[0], batch_size=1
-)
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
@@ -1530,19 +1547,6 @@ train_dataloader, valid_dataloader = create_dataloaders(
 # > translations. Here we simply translate the first sentence in the
 # > validation set. This dataset is pretty small so the translations
 # > with greedy search are reasonably accurate.
-
-# %%
-enumer = enumerate(valid_dataloader)
-
-# %%
-i, b = next(enumer)
-
-# %%
-batch = rebatch(i, b)
-batch
-
-# %%
-batch.tgt_mask
 
 # %% id="f0mNHT4iTsqN"
 # for i, batch in enumerate(valid_iter):
