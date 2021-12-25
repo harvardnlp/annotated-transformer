@@ -84,6 +84,20 @@ def show_example(fn, args=[]):
 
 def train_example(fn, args=[]):
     fn(*args)
+    
+class NoopOptimizer(torch.optim.Optimizer):
+    def __init__(self):
+        None
+    def step(self):
+        None
+    def zero_grad(self, set_to_none=False):
+        None
+        
+class NoopScheduler:
+    def __init__(self):
+        None
+    def step(self):
+        None    
 
 
 # %% [markdown] id="RSntDwKhTsp-"
@@ -537,6 +551,9 @@ class MultiHeadedAttention(nn.Module):
             .contiguous()
             .view(nbatches, -1, self.h * self.d_k)
         )
+        del query
+        del key
+        del value
         return self.linears[-1](x)
 
 
@@ -758,6 +775,7 @@ def make_model(
 # Small example model.
 tmp_model = make_model(11, 11, 2)
 
+
 # %% [markdown]
 # ## Inference:
 #
@@ -769,25 +787,32 @@ tmp_model = make_model(11, 11, 2)
 # from 1 to 10.
 
 # %%
-tmp_model.eval()
-src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
-src_mask = torch.ones(1, 1, 10)
+def inference_test(tmp_model):
+    tmp_model.eval()
+    src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
+    src_mask = torch.ones(1, 1, 10)
 
-memory = tmp_model.encode(src, src_mask)
-ys = torch.ones(1, 1).fill_(1).type_as(src)
+    memory = tmp_model.encode(src, src_mask)
+    ys = torch.ones(1, 1).fill_(1).type_as(src)
 
-for i in range(10 - 1):
-    out = tmp_model.decode(
-        memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
-    )
-    prob = tmp_model.generator(out[:, -1])
-    _, next_word = torch.max(prob, dim=1)
-    next_word = next_word.data[0]
-    ys = torch.cat(
-        [ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1
-    )
+    for i in range(10 - 1):
+        out = tmp_model.decode(
+            memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
+        )
+        prob = tmp_model.generator(out[:, -1])
+        _, next_word = torch.max(prob, dim=1)
+        next_word = next_word.data[0]
+        ys = torch.cat(
+            [ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1
+        )
 
-print("Untrained Model Prediction", ys)
+    print("Untrained Model Prediction", ys)
+
+
+# %%
+for _ in range(10):
+    tmp_model = make_model(11, 11, 2)
+    inference_test(tmp_model)
 
 
 # %% [markdown]
@@ -841,7 +866,7 @@ class Batch:
 # ## Training Loop
 
 # %% id="2HAZD3hiTsqJ"
-def run_epoch(data_iter, model, loss_compute):
+def run_epoch(data_iter, model, loss_compute, optimizer, scheduler, accum_iter=1):
     "Standard Training and Logging Function"
     start = time.time()
     total_tokens = 0
@@ -849,13 +874,20 @@ def run_epoch(data_iter, model, loss_compute):
     tokens = 0
     for i, batch in enumerate(data_iter):
         out = model.forward(
-            batch.src, batch.tgt, batch.src_mask, batch.tgt_mask
-        )
-        loss = float(loss_compute(out, batch.tgt_y, batch.ntokens))
+            batch.src, batch.tgt, batch.src_mask, batch.tgt_mask)
+        loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)  
+        # loss_node = loss_node / accum_iter
+        loss_node.backward()
+        if i % accum_iter == 0:
+            print("Accumulating gradients")
+            optimizer.step()
+            optimizer.zero_grad(set_to_none=True)
+            scheduler.step()        
+        
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
-        if i % 50 == 1:
+        if i % 20 == 1:
             elapsed = time.time() - start
             print(
                 "Epoch Step: %d Loss: %f Tokens per Sec: %f"
@@ -863,6 +895,9 @@ def run_epoch(data_iter, model, loss_compute):
             )
             start = time.time()
             tokens = 0
+        del loss
+        del loss_node
+    torch.cuda.empty_cache()            
     return total_loss / total_tokens
 
 
@@ -967,13 +1002,13 @@ def example_learning_schedule():
         [256, 1, 4000],
     ]  # example 3
 
-    # A dummpy for demo.
-    dummy_model = make_model(10, 10, 2)
+    # dummy_model = make_model(10, 10, 2)
+    dummy_model = torch.nn.Linear(1, 1)
 
     show_list = []
 
     # we have 3 examples in opts list.
-    for example in opts:
+    for idx, example in enumerate(opts):
         # run 20000 epoch for each example
         optimizer = torch.optim.Adam(
             dummy_model.parameters(), lr=1, betas=(0.9, 0.98), eps=1e-9
@@ -986,10 +1021,10 @@ def example_learning_schedule():
             tmp.append(optimizer.param_groups[0]["lr"])
             optimizer.step()
             lr_scheduler.step()
-            optimizer.zero_grad()
+            # optimizer.zero_grad(set_to_none=True)
         show_list.append(tmp)
 
-    show_list = torch.tensor(show_list).T
+    show_list = torch.tensor(show_list)
 
     # Enable altair to handle more than 5000 rows
     alt.data_transformers.disable_max_rows()
@@ -998,7 +1033,7 @@ def example_learning_schedule():
         [
             pd.DataFrame(
                 {
-                    "Learning Rate": show_list[:, warmup_idx],
+                    "Learning Rate": show_list[warmup_idx, :],
                     "model_size:warmup": ["512:4000", "512:8000", "256:4000"][
                         warmup_idx
                     ],
@@ -1016,8 +1051,7 @@ def example_learning_schedule():
         .encode(x="step", y="Learning Rate", color="model_size:warmup:N")
     )
 
-
-show_example(example_learning_schedule)
+# example_learning_schedule()
 
 
 # %% [markdown] id="7T1uD15VTsqK"
@@ -1112,7 +1146,7 @@ def example_label_smoothing():
     )
 
 
-show_example(example_label_smoothing)
+# show_example(example_label_smoothing)
 
 # %% [markdown] id="CGM8J1veTsqK"
 #
@@ -1145,8 +1179,7 @@ def example_label_smoothing2():
     )
 
 
-show_example(example_label_smoothing2)
-
+# show_example(example_label_smoothing2)
 
 # %% [markdown] id="67lUqeLXTsqK"
 # # A First  Example
@@ -1176,11 +1209,9 @@ def data_gen(V, batch, nbatches):
 class SimpleLossCompute:
     "A simple loss compute and train function."
 
-    def __init__(self, generator, criterion, opt=None, lr_scheduler=None):
+    def __init__(self, generator, criterion):
         self.generator = generator
         self.criterion = criterion
-        self.opt = opt
-        self.lr_scheduler = lr_scheduler
 
     def __call__(self, x, y, norm):
         x = self.generator(x)
@@ -1190,19 +1221,13 @@ class SimpleLossCompute:
             )
             / norm
         )
-        sloss.backward()
-        if self.opt is not None:
-           self.opt.step()
-           self.opt.zero_grad()
-           if self.lr_scheduler:
-               self.lr_scheduler.step()
-        return sloss.data * norm
+        return sloss.data * norm, sloss
 
 
 # %% [markdown] id="eDAI7ELUTsqL"
 # ## Greedy Decoding
 
-# %% [markdown] id="LFkWakplTsqL"
+# %% [markdown] id="LFkWakplTsqL" tags=[]
 # > This code predicts a translation using greedy decoding for simplicity.
 # %% id="N2UOpnT3bIyU"
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
@@ -1246,15 +1271,19 @@ def example_simple_model():
             data_gen(V, 30, 20),
             model,
             SimpleLossCompute(
-                model.generator, criterion, optimizer, lr_scheduler
+                model.generator, criterion
             ),
+            optimizer,
+            lr_scheduler,
         )
         model.eval()
         print(
             run_epoch(
                 data_gen(V, 30, 5),
                 model,
-                SimpleLossCompute(model.generator, criterion, None),
+                SimpleLossCompute(model.generator, criterion),
+                NoopOptimizer(),
+                NoopScheduler()
             )
         )
 
@@ -1262,7 +1291,6 @@ def example_simple_model():
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
-
 
 # train_example(example_simple_model)
 
@@ -1330,6 +1358,7 @@ print("Finished.\nVocabulary sizes:")
 print(len(vocab_src))
 print(len(vocab_tgt))
 
+
 # %% [markdown] id="-l-TFwzfTsqL"
 #
 # > Batching matters a ton for speed. We want to have very evenly
@@ -1342,8 +1371,6 @@ print(len(vocab_tgt))
 # ## Iterators
 
 # %% id="wGsIHFgOokC_" tags=[]
-
-
 def collate_batch(
     batch,
     src_pipeline,
@@ -1357,10 +1384,10 @@ def collate_batch(
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
         processed_src = torch.tensor(
-            src_vocab(src_pipeline(_src)), dtype=torch.int64
+            src_vocab(src_pipeline(_src)), dtype=torch.int64, device=device
         )
         processed_tgt = torch.tensor(
-            tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64
+            tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64, device=device
         )
         src_list.append(
             pad(
@@ -1379,11 +1406,13 @@ def collate_batch(
 
     src = torch.stack(src_list)
     tgt = torch.stack(tgt_list)
-    return src.to(device), tgt.to(device)
+    return (src, tgt)
+    # return src.to(device), tgt.to(device)
 
 
-# %% id="ka2Ce_WIokC_"
+# %% id="ka2Ce_WIokC_" tags=[]
 def create_dataloaders(device, batch_size=12000):
+# def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
             batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device
@@ -1396,13 +1425,13 @@ def create_dataloaders(device, batch_size=12000):
         to_map_style_dataset(train_iter),
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_fn,
+        collate_fn=collate_fn
     )
     valid_dataloader = DataLoader(
         to_map_style_dataset(valid_iter),
         batch_size=batch_size,
         shuffle=True,
-        collate_fn=collate_fn,
+        collate_fn=collate_fn
     )
     return train_dataloader, valid_dataloader
 
@@ -1428,21 +1457,23 @@ def rebatch(pad_idx, batch):
 
 
 # %%
-def train_model(vocab_src, vocab_tgt, device, batch_size=12000, num_epochs=10):
+def train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, accum_iter=12000 / 64):
     pad_idx = vocab_tgt["<blank>"]
-    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model = nn.DataParallel(model_init, device_ids=devices)
     d_model = 512
-    model.cuda()
+    model_init.cuda()
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda()
     train_dataloader, valid_dataloader = create_dataloaders(
-        device, batch_size=batch_size
+        # batch_size=batch_size
+        devices[0], batch_size=batch_size
     )
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=10.0, betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
@@ -1456,33 +1487,42 @@ def train_model(vocab_src, vocab_tgt, device, batch_size=12000, num_epochs=10):
             (rebatch(pad_idx, b) for b in train_dataloader),
             model,
             SimpleLossCompute(
-                model.generator,
-                criterion,
-                opt=optimizer,
-                lr_scheduler=lr_scheduler,
+                model_init.generator,
+                criterion
             ),
+            optimizer,
+            lr_scheduler,
+            accum_iter
         )
         model.eval()
         sloss = run_epoch(
             (rebatch(pad_idx, b) for b in valid_dataloader),
             model,
-            SimpleLossCompute(model.generator, criterion, opt=None),
+            SimpleLossCompute(model_init.generator, criterion),
+            NoopOptimizer(),
+            NoopScheduler()
         )
         print(sloss) 
     return model
 
 
-# %% id="jZeYHJcdTsqN" tags=[]
+# %%
 create_model = True
 devices = range(torch.cuda.device_count())
 
 if create_model:
-    model = train_model(vocab_src, vocab_tgt, devices[0], batch_size=16, num_epochs=1)
+    # effective batch size = accum_iter x batch_size
+    model = train_model(vocab_src, vocab_tgt, devices, batch_size=64, num_epochs=10, accum_iter=50)
 else:
     model = torch.load("iwslt.pt")
 
 # %%
-3
+torch.cuda.empty_cache()
+
+# %%
+train_dataloader, valid_dataloader = create_dataloaders(
+        devices[0], batch_size=1
+)
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
@@ -1492,7 +1532,17 @@ else:
 # > with greedy search are reasonably accurate.
 
 # %%
-model([3], [3], [1], [1])
+enumer = enumerate(valid_dataloader)
+
+# %%
+i, b = next(enumer)
+
+# %%
+batch = rebatch(i, b)
+batch
+
+# %%
+batch.tgt_mask
 
 # %% id="f0mNHT4iTsqN"
 # for i, batch in enumerate(valid_iter):
