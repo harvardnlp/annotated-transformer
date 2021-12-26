@@ -15,6 +15,31 @@
 # ---
 
 # %% [markdown] tags=[]
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
+#
 # ![Main Figure](images/aiayn.png)
 
 # %% [markdown] id="SX7UC-8jTsp7" tags=[]
@@ -76,18 +101,22 @@ from torch.utils.data import DataLoader
 from torchtext.vocab import build_vocab_from_iterator
 import torchtext.datasets as datasets
 import spacy
+import GPUtil
+
+# temporary for debugging - remove before final version
+import wandb
 
 
 def show_example(fn, args=[]):
     return fn(*args)
 
-
 def train_example(fn, args=[]):
     fn(*args)
 
-
 class NoopOptimizer(torch.optim.Optimizer):
+
     def __init__(self):
+        self.param_groups = [{"lr": 0}]
         None
 
     def step(self):
@@ -784,6 +813,7 @@ def make_model(
 
 # %% id="azdUh766TsqI"
 # Small example model.
+
 tmp_model = make_model(11, 11, 2)
 
 
@@ -819,11 +849,12 @@ def inference_test(tmp_model):
 
     print("Untrained Model Prediction", ys)
 
-
-# %%
-for _ in range(10):
-    tmp_model = make_model(11, 11, 2)
-    inference_test(tmp_model)
+def run_tests():    
+    for _ in range(10):
+        tmp_model = make_model(11, 11, 2)
+        inference_test(tmp_model)
+    
+show_example(run_tests)
 
 
 # %% [markdown]
@@ -878,34 +909,42 @@ class Batch:
 
 # %% id="2HAZD3hiTsqJ"
 def run_epoch(
-    data_iter, model, loss_compute, optimizer, scheduler, accum_iter=1
+    data_iter, model, loss_compute, optimizer, scheduler, mode='train', accum_iter=1
 ):
     "Standard Training and Logging Function"
     start = time.time()
     total_tokens = 0
     total_loss = 0
     tokens = 0
+    n_accum = 0
     for i, batch in enumerate(data_iter):
         out = model.forward(
             batch.src, batch.tgt, batch.src_mask, batch.tgt_mask
         )
         loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
         # loss_node = loss_node / accum_iter
-        loss_node.backward()
-        if i % accum_iter == 0:
-            print("Accumulating gradients")
-            optimizer.step()
-            optimizer.zero_grad(set_to_none=True)
+        if mode == 'train':
+            loss_node.backward()
+            if i % accum_iter == 0:
+                optimizer.step()
+                optimizer.zero_grad(set_to_none=True)
+                n_accum = n_accum + 1
             scheduler.step()
 
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
-        if i % 20 == 1:
+        if i % 10 == 1 and mode == 'train':
+            lr = optimizer.param_groups[0]["lr"]
+            elapsed = time.time() - start
+            wandb.log({"step":i, "accum_step":n_accum, "loss": loss / batch.ntokens,
+                       "tokens_per_sec": tokens/elapsed, "lr": lr, "samples": i * batch.src.shape[0]})
+        if i % 20 == 1 and mode == 'train':
+            lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
-                "Epoch Step: %d Loss: %f Tokens per Sec: %f"
-                % (i, loss / batch.ntokens, tokens / elapsed)
+                "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f | Tokens per Sec: %7.1f | Learning Rate: %10.1e"
+                % (i, n_accum, loss / batch.ntokens, tokens / elapsed, lr)
             )
             start = time.time()
             tokens = 0
@@ -1258,7 +1297,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
     return ys
 
 
-# %% id="qgIZ2yEtdYwe"
+# %% id="qgIZ2yEtdYwe" tags=[]
 # Train the simple copy task.
 
 
@@ -1285,6 +1324,7 @@ def example_simple_model():
             SimpleLossCompute(model.generator, criterion),
             optimizer,
             lr_scheduler,
+            mode="train"
         )
         model.eval()
         print(
@@ -1294,6 +1334,7 @@ def example_simple_model():
                 SimpleLossCompute(model.generator, criterion),
                 NoopOptimizer(),
                 NoopScheduler(),
+                mode="eval"
             )
         )
 
@@ -1301,6 +1342,7 @@ def example_simple_model():
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
+
 
 
 # train_example(example_simple_model)
@@ -1347,28 +1389,38 @@ def yield_tokens(data_iter, tokenizer, index):
 spacy_de = spacy.load("de_core_news_sm")
 spacy_en = spacy.load("en_core_web_sm")
 
-print("Building German Vocabulary ...")
-train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
-vocab_src = build_vocab_from_iterator(
-    yield_tokens(train + val + test, tokenize_de, index=0),
-    min_freq=2,
-    specials=["<s>", "</s>", "<blank>", "<unk>"],
-)
+def build_vocabulary():
 
-print("Building English Vocabulary ...")
-train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
-vocab_tgt = build_vocab_from_iterator(
-    yield_tokens(train + val + test, tokenize_en, index=1),
-    min_freq=2,
-    specials=["<s>", "</s>", "<blank>", "<unk>"],
-)
+    print("Building German Vocabulary ...")
+    train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+    vocab_src = build_vocab_from_iterator(
+        yield_tokens(train + val + test, tokenize_de, index=0),
+        min_freq=2,
+        specials=["<s>", "</s>", "<blank>", "<unk>"],
+    )
 
-vocab_src.set_default_index(vocab_src["<unk>"])
-vocab_tgt.set_default_index(vocab_tgt["<unk>"])
+    print("Building English Vocabulary ...")
+    train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+    vocab_tgt = build_vocab_from_iterator(
+        yield_tokens(train + val + test, tokenize_en, index=1),
+        min_freq=2,
+        specials=["<s>", "</s>", "<blank>", "<unk>"],
+    )
 
-print("Finished.\nVocabulary sizes:")
-print(len(vocab_src))
-print(len(vocab_tgt))
+    vocab_src.set_default_index(vocab_src["<unk>"])
+    vocab_tgt.set_default_index(vocab_tgt["<unk>"])
+
+    print("Finished.\nVocabulary sizes:")
+    print(len(vocab_src))
+    print(len(vocab_tgt))
+    
+    return vocab_src, vocab_tgt
+
+if False:
+    vocab_src, vocab_tgt = build_vocabulary()
+    torch.save((vocab_src, vocab_tgt), 'vocab.pt')
+else:
+    vocab_src, vocab_tgt = torch.load('vocab.pt')
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1423,11 +1475,11 @@ def collate_batch(
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
-def create_dataloaders(device, batch_size=12000):
+def create_dataloaders(device, batch_size=12000, max_padding=128):
     # def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
-            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device
+            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device, max_padding=max_padding
         )
 
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
@@ -1476,10 +1528,16 @@ def train_model(
     batch_size=64,
     num_epochs=10,
     accum_iter=12000 / 64,
+    base_lr=1.0,
+    max_padding=128,
+    warmup=2000,
+    file_prefix='iwslt'
 ):
-    pad_idx = vocab_tgt["<blank>"]
+    # pad_idx = vocab_tgt["<blank>"]
+    pad_idx = vocab_tgt["<s>"]
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model = nn.DataParallel(model_init, device_ids=devices)
+    wandb.watch(model.module)
     d_model = 512
     model_init.cuda()
     criterion = LabelSmoothing(
@@ -1490,40 +1548,66 @@ def train_model(
         # batch_size=batch_size
         devices[0],
         batch_size=batch_size,
+        max_padding=max_padding
     )
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=10.0, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=base_lr, betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
-        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=2000),
+        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
     )
     for epoch in range(num_epochs):
+        wandb.log({'epoch': epoch})
         model.train()
+        print("Epoch " + str(epoch) + " Training ====")
         run_epoch(
             (rebatch(pad_idx, b) for b in train_dataloader),
             model,
-            SimpleLossCompute(model_init.generator, criterion),
+            SimpleLossCompute(model.module.generator, criterion),
             optimizer,
             lr_scheduler,
-            accum_iter,
+            mode='train',
+            accum_iter=accum_iter            
         )
+        GPUtil.showUtilization()
+        torch.save(model, "%s%.2d.pt" % (file_prefix, epoch))
+
+        print("Epoch " + str(epoch) + " Validation ====")
         model.eval()
         sloss = run_epoch(
             (rebatch(pad_idx, b) for b in valid_dataloader),
             model,
-            SimpleLossCompute(model_init.generator, criterion),
+            SimpleLossCompute(model.module.generator, criterion),
             NoopOptimizer(),
             NoopScheduler(),
+            mode='eval'
         )
         print(sloss)
+    file_path = "%s_final.pt" % file_prefix
+    torch.save(model, file_path)
+    wandb.log_artifact(file_path, name='final_model', type='model') 
     return model
 
 
-# %%
+# %% tags=[] jupyter={"outputs_hidden": true}
 create_model = True
 devices = range(torch.cuda.device_count())
+
+config = {
+    'batch_size': 96,
+    'num_epochs': 20,
+    'accum_iter': 32,
+    'base_lr': 1.0,
+    'max_padding': 96,
+    'warmup': 2000,
+    'file_prefix': 'iwslt_'
+}
+
+# for debugging - remove later
+wandb.config = config
+wandb.init(project="at2021", entity="avh", config=config)
 
 if create_model:
     # effective batch size = accum_iter x batch_size
@@ -1531,15 +1615,52 @@ if create_model:
         vocab_src,
         vocab_tgt,
         devices,
-        batch_size=64,
-        num_epochs=10,
-        accum_iter=50,
+        **config
     )
 else:
     model = torch.load("iwslt.pt")
 
 # %%
+assert(False)
+
+# %%
+#del train_dataloader
+#del valid_dataloader
+#del model
 torch.cuda.empty_cache()
+GPUtil.showUtilization()
+
+
+# %%
+def check_outputs(
+    model,
+    vocab_src,
+    vocab_tgt
+):
+    
+    train_dataloader, valid_dataloader = create_dataloaders(
+        # batch_size=batch_size
+        torch.device('cpu'),
+        batch_size=1,
+    )
+    
+    for _ in range(10):
+        # pad_idx = vocab_tgt["<blank>"]
+        pad_idx = 0 # TODO - check consistency
+        b = next(iter(valid_dataloader))
+        rb = rebatch(pad_idx, b)
+
+        print("Source Text (Input):")
+        print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 0]))
+        print("Target Text (Ground Truth):")
+        print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 0]))
+        print("Model Output:")
+        model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 1)[0]
+        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != 0])
+        print(model_txt)
+
+# check_outputs(model, vocab_src, vocab_tgt)    
+
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #

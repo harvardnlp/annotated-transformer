@@ -5,3 +5,4 @@ altair==4.1
 jupytext==1.13
 flake8
 black
+GPUtil
