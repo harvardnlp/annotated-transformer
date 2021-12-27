@@ -875,11 +875,11 @@ show_example(run_tests)
 # %% [markdown] id="G7SkCenXTsqI"
 # ## Batches and Masking
 
-# %% id="OJ4VDeQkTsqI"
+# %%
 class Batch:
     "Object for holding a batch of data with mask during training."
 
-    def __init__(self, src, tgt=None, pad=0):
+    def __init__(self, src, tgt=None, pad=2): # 2 = <blank> for IWST
         self.src = src
         self.src_mask = (src != pad).unsqueeze(-2)
         if tgt is not None:
@@ -950,7 +950,6 @@ def run_epoch(
             tokens = 0
         del loss
         del loss_node
-    torch.cuda.empty_cache()
     return total_loss / total_tokens
 
 
@@ -1443,7 +1442,7 @@ def collate_batch(
     tgt_vocab,
     device,
     max_padding=128,
-    pad_id=0,
+    pad_id=2,
 ):
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
@@ -1479,7 +1478,7 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
     # def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
-            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device, max_padding=max_padding
+            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device, max_padding=max_padding, pad_id=vocab_src.get_stoi()['<blank>']
         )
 
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
@@ -1533,8 +1532,7 @@ def train_model(
     warmup=2000,
     file_prefix='iwslt'
 ):
-    # pad_idx = vocab_tgt["<blank>"]
-    pad_idx = vocab_tgt["<s>"]
+    pad_idx = vocab_tgt["<blank>"]    
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model = nn.DataParallel(model_init, device_ids=devices)
     wandb.watch(model.module)
@@ -1571,8 +1569,12 @@ def train_model(
             mode='train',
             accum_iter=accum_iter            
         )
-        GPUtil.showUtilization()
-        torch.save(model, "%s%.2d.pt" % (file_prefix, epoch))
+        
+        GPUtil.showUtilization()        
+        file_path = "%s%.2d.pt" % (file_prefix, epoch)
+        torch.save(model, file_path)
+        wandb.log_artifact(file_path, name=file_path, type='model') 
+        torch.cuda.empty_cache()
 
         print("Epoch " + str(epoch) + " Validation ====")
         model.eval()
@@ -1585,22 +1587,26 @@ def train_model(
             mode='eval'
         )
         print(sloss)
-    file_path = "%s_final.pt" % file_prefix
+        torch.cuda.empty_cache()
+    file_path = "%sfinal.pt" % file_prefix
     torch.save(model, file_path)
     wandb.log_artifact(file_path, name='final_model', type='model') 
     return model
 
 
-# %% tags=[] jupyter={"outputs_hidden": true}
+# %%
+# assert(False)
+
+# %% tags=[]
 create_model = True
 devices = range(torch.cuda.device_count())
 
 config = {
-    'batch_size': 96,
+    'batch_size': 112,
     'num_epochs': 20,
-    'accum_iter': 32,
+    'accum_iter': 4,
     'base_lr': 1.0,
-    'max_padding': 96,
+    'max_padding': 72,
     'warmup': 2000,
     'file_prefix': 'iwslt_'
 }
@@ -1621,14 +1627,11 @@ else:
     model = torch.load("iwslt.pt")
 
 # %%
-assert(False)
-
-# %%
 #del train_dataloader
 #del valid_dataloader
 #del model
 torch.cuda.empty_cache()
-GPUtil.showUtilization()
+GPUtil.showUCtilization()
 
 
 # %%
@@ -1645,18 +1648,17 @@ def check_outputs(
     )
     
     for _ in range(10):
-        # pad_idx = vocab_tgt["<blank>"]
-        pad_idx = 0 # TODO - check consistency
+        pad_idx = vocab_tgt["<blank>"]        
         b = next(iter(valid_dataloader))
         rb = rebatch(pad_idx, b)
 
         print("Source Text (Input):")
-        print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 0]))
+        print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
         print("Target Text (Ground Truth):")
-        print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 0]))
+        print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
         print("Model Output:")
         model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 1)[0]
-        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != 0])
+        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != 2])
         print(model_txt)
 
 # check_outputs(model, vocab_src, vocab_tgt)    
