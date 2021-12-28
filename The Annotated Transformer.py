@@ -745,8 +745,7 @@ def example_positional():
     )
 
 
-show_example(example_positional)
-
+# show_example(example_positional)
 
 # %% [markdown] id="g8rZNCrzTsqI"
 #
@@ -832,8 +831,7 @@ def run_tests():
         inference_test(tmp_model)
 
 
-show_example(run_tests)
-
+# show_example(run_tests)
 
 # %% [markdown]
 # # Tutorial 2: Training
@@ -885,6 +883,14 @@ class Batch:
 # %% [markdown] id="Q8zzeUc0TsqJ"
 # ## Training Loop
 
+# %%
+class TrainState:
+    step: int = 0
+    accum_step: int = 0
+    samples: int = 0
+    tokens: int = 0
+
+
 # %% id="2HAZD3hiTsqJ"
 def run_epoch(
     data_iter,
@@ -894,6 +900,7 @@ def run_epoch(
     scheduler,
     mode="train",
     accum_iter=1,
+    train_state = TrainState()
 ):
     "Standard Training and Logging Function"
     start = time.time()
@@ -907,12 +914,16 @@ def run_epoch(
         )
         loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
         # loss_node = loss_node / accum_iter
-        if mode == "train":
+        if (mode == "train" or mode == "train+log"):
             loss_node.backward()
+            train_state.step +=1
+            train_state.samples += batch.src.shape[0]
+            train_state.tokens += batch.ntokens
             if i % accum_iter == 0:
                 optimizer.step()
                 optimizer.zero_grad(set_to_none=True)
-                n_accum = n_accum + 1
+                n_accum += 1
+                train_state.accum_step += 1
             scheduler.step()
 
         total_loss += loss
@@ -929,6 +940,10 @@ def run_epoch(
                     "tokens_per_sec": tokens / elapsed,
                     "lr": lr,
                     "samples": i * batch.src.shape[0],
+                    "total_microbatch_step": train_state.step,
+                    "total_accum_step": train_state.accum_step,
+                    "total_samples": train_state.samples,
+                    "total_tokens": train_state.tokens
                 }
             )
         if i % 20 == 1 and mode == "train":
@@ -945,7 +960,7 @@ def run_epoch(
             tokens = 0
         del loss
         del loss_node
-    return total_loss / total_tokens
+    return total_loss / total_tokens, train_state
 
 
 # %% [markdown] id="aB1IF0foTsqJ"
@@ -1518,13 +1533,6 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
 # %% id="Kx53VVTgTsqM" tags=[]
 # #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 
-# %% id="9hR8Rvx-okDA"
-def rebatch(pad_idx, batch):
-    "Fix order in torchtext to match ours"
-    src, tgt = batch[0], batch[1]
-    return Batch(src, tgt, pad_idx)
-
-
 # %%
 def train_model(
     vocab_src,
@@ -1562,18 +1570,20 @@ def train_model(
         optimizer=optimizer,
         lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
     )
+    train_state = TrainState()
     for epoch in range(num_epochs):
         wandb.log({"epoch": epoch})
         model.train()
         print("Epoch " + str(epoch) + " Training ====")
-        run_epoch(
-            (rebatch(pad_idx, b) for b in train_dataloader),
+        _, train_state = run_epoch(
+            (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
             model,
             SimpleLossCompute(model.module.generator, criterion),
             optimizer,
             lr_scheduler,
             mode="train+log",
             accum_iter=accum_iter,
+            train_state=train_state
         )
 
         GPUtil.showUtilization()
@@ -1585,7 +1595,7 @@ def train_model(
         print("Epoch " + str(epoch) + " Validation ====")
         model.eval()
         sloss = run_epoch(
-            (rebatch(pad_idx, b) for b in valid_dataloader),
+            (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
             model,
             SimpleLossCompute(model.module.generator, criterion),
             NoopOptimizer(),
@@ -1609,10 +1619,10 @@ devices = range(torch.cuda.device_count())
 
 config = {
     # "batch_size": 112,
-    "batch_size": 16,
+    "batch_size": 32,
     "num_epochs": 20,
     # "accum_iter": 4,
-    "accum_iter": 50,
+    "accum_iter": 20,
     "base_lr": 1.0,
     "max_padding": 72,
     "warmup": 2000,
@@ -1649,7 +1659,7 @@ def check_outputs(model, vocab_src, vocab_tgt):
     for _ in range(10):
         pad_idx = vocab_tgt["<blank>"]
         b = next(iter(valid_dataloader))
-        rb = rebatch(pad_idx, b)
+        rb = Batch(b[0], b[1], pad_idx)
 
         print("Source Text (Input):")
         print(" ".join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
