@@ -62,6 +62,7 @@
 # # !pip install -r requirements.txt
 
 # %% id="v1-1MX6oTsp9"
+from os.path import exists
 import torch
 import torch.nn as nn
 from torch.nn.functional import log_softmax, pad
@@ -1429,7 +1430,7 @@ def build_vocabulary():
     return vocab_src, vocab_tgt
 
 
-if False:
+if not exists("vocab.pt"):
     vocab_src, vocab_tgt = build_vocabulary()
     torch.save((vocab_src, vocab_tgt), "vocab.pt")
 else:
@@ -1618,8 +1619,7 @@ create_model = True
 devices = range(torch.cuda.device_count())
 
 config = {
-    # "batch_size": 112,
-    "batch_size": 32,
+    "batch_size": 64,
     "num_epochs": 20,
     # "accum_iter": 4,
     "accum_iter": 20,
