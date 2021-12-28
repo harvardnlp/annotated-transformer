@@ -935,7 +935,10 @@ def run_epoch(
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
-                "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f | Tokens per Sec: %7.1f | Learning Rate: %10.1e"
+                (
+                    "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f "
+                    + "| Tokens per Sec: %7.1f | Learning Rate: %10.1e"
+                )
                 % (i, n_accum, loss / batch.ntokens, tokens / elapsed, lr)
             )
             start = time.time()
