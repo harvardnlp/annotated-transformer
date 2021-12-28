@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.4
+#       jupytext_version: 1.13.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -15,32 +15,7 @@
 # ---
 
 # %% [markdown] tags=[]
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-#
-# ![Main Figure](images/aiayn.png)
+# #### ![Main Figure](images/aiayn.png)
 
 # %% [markdown] id="SX7UC-8jTsp7" tags=[]
 #
@@ -110,11 +85,12 @@ import wandb
 def show_example(fn, args=[]):
     return fn(*args)
 
+
 def train_example(fn, args=[]):
     fn(*args)
 
-class NoopOptimizer(torch.optim.Optimizer):
 
+class NoopOptimizer(torch.optim.Optimizer):
     def __init__(self):
         self.param_groups = [{"lr": 0}]
         None
@@ -849,11 +825,13 @@ def inference_test(tmp_model):
 
     print("Untrained Model Prediction", ys)
 
-def run_tests():    
+
+def run_tests():
     for _ in range(10):
         tmp_model = make_model(11, 11, 2)
         inference_test(tmp_model)
-    
+
+
 show_example(run_tests)
 
 
@@ -879,7 +857,7 @@ show_example(run_tests)
 class Batch:
     "Object for holding a batch of data with mask during training."
 
-    def __init__(self, src, tgt=None, pad=2): # 2 = <blank> for IWST
+    def __init__(self, src, tgt=None, pad=2):  # 2 = <blank> for IWST
         self.src = src
         self.src_mask = (src != pad).unsqueeze(-2)
         if tgt is not None:
@@ -909,7 +887,13 @@ class Batch:
 
 # %% id="2HAZD3hiTsqJ"
 def run_epoch(
-    data_iter, model, loss_compute, optimizer, scheduler, mode='train', accum_iter=1
+    data_iter,
+    model,
+    loss_compute,
+    optimizer,
+    scheduler,
+    mode="train",
+    accum_iter=1,
 ):
     "Standard Training and Logging Function"
     start = time.time()
@@ -923,7 +907,7 @@ def run_epoch(
         )
         loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
         # loss_node = loss_node / accum_iter
-        if mode == 'train':
+        if mode == "train":
             loss_node.backward()
             if i % accum_iter == 0:
                 optimizer.step()
@@ -934,12 +918,20 @@ def run_epoch(
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
-        if i % 10 == 1 and mode == 'train':
+        if i % 10 == 1 and mode == "train+log":
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
-            wandb.log({"step":i, "accum_step":n_accum, "loss": loss / batch.ntokens,
-                       "tokens_per_sec": tokens/elapsed, "lr": lr, "samples": i * batch.src.shape[0]})
-        if i % 20 == 1 and mode == 'train':
+            wandb.log(
+                {
+                    "step": i,
+                    "accum_step": n_accum,
+                    "loss": loss / batch.ntokens,
+                    "tokens_per_sec": tokens / elapsed,
+                    "lr": lr,
+                    "samples": i * batch.src.shape[0],
+                }
+            )
+        if i % 20 == 1 and mode == "train":
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
@@ -1225,7 +1217,10 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(x="Steps", y="Loss",)
+        .encode(
+            x="Steps",
+            y="Loss",
+        )
     )
 
 
@@ -1323,7 +1318,7 @@ def example_simple_model():
             SimpleLossCompute(model.generator, criterion),
             optimizer,
             lr_scheduler,
-            mode="train"
+            mode="train",
         )
         model.eval()
         print(
@@ -1333,7 +1328,7 @@ def example_simple_model():
                 SimpleLossCompute(model.generator, criterion),
                 NoopOptimizer(),
                 NoopScheduler(),
-                mode="eval"
+                mode="eval",
             )
         )
 
@@ -1341,7 +1336,6 @@ def example_simple_model():
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
     print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
-
 
 
 # train_example(example_simple_model)
@@ -1388,6 +1382,7 @@ def yield_tokens(data_iter, tokenizer, index):
 spacy_de = spacy.load("de_core_news_sm")
 spacy_en = spacy.load("en_core_web_sm")
 
+
 def build_vocabulary():
 
     print("Building German Vocabulary ...")
@@ -1412,14 +1407,15 @@ def build_vocabulary():
     print("Finished.\nVocabulary sizes:")
     print(len(vocab_src))
     print(len(vocab_tgt))
-    
+
     return vocab_src, vocab_tgt
+
 
 if False:
     vocab_src, vocab_tgt = build_vocabulary()
-    torch.save((vocab_src, vocab_tgt), 'vocab.pt')
+    torch.save((vocab_src, vocab_tgt), "vocab.pt")
 else:
-    vocab_src, vocab_tgt = torch.load('vocab.pt')
+    vocab_src, vocab_tgt = torch.load("vocab.pt")
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1478,7 +1474,14 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
     # def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
-            batch, tokenize_de, tokenize_en, vocab_src, vocab_tgt, device, max_padding=max_padding, pad_id=vocab_src.get_stoi()['<blank>']
+            batch,
+            tokenize_de,
+            tokenize_en,
+            vocab_src,
+            vocab_tgt,
+            device,
+            max_padding=max_padding,
+            pad_id=vocab_src.get_stoi()["<blank>"],
         )
 
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
@@ -1530,9 +1533,9 @@ def train_model(
     base_lr=1.0,
     max_padding=128,
     warmup=2000,
-    file_prefix='iwslt'
+    file_prefix="iwslt",
 ):
-    pad_idx = vocab_tgt["<blank>"]    
+    pad_idx = vocab_tgt["<blank>"]
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model = nn.DataParallel(model_init, device_ids=devices)
     wandb.watch(model.module)
@@ -1546,7 +1549,7 @@ def train_model(
         # batch_size=batch_size
         devices[0],
         batch_size=batch_size,
-        max_padding=max_padding
+        max_padding=max_padding,
     )
 
     optimizer = torch.optim.Adam(
@@ -1557,7 +1560,7 @@ def train_model(
         lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
     )
     for epoch in range(num_epochs):
-        wandb.log({'epoch': epoch})
+        wandb.log({"epoch": epoch})
         model.train()
         print("Epoch " + str(epoch) + " Training ====")
         run_epoch(
@@ -1566,14 +1569,14 @@ def train_model(
             SimpleLossCompute(model.module.generator, criterion),
             optimizer,
             lr_scheduler,
-            mode='train',
-            accum_iter=accum_iter            
+            mode="train+log",
+            accum_iter=accum_iter,
         )
-        
-        GPUtil.showUtilization()        
+
+        GPUtil.showUtilization()
         file_path = "%s%.2d.pt" % (file_prefix, epoch)
         torch.save(model, file_path)
-        wandb.log_artifact(file_path, name=file_path, type='model') 
+        wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
         print("Epoch " + str(epoch) + " Validation ====")
@@ -1584,13 +1587,13 @@ def train_model(
             SimpleLossCompute(model.module.generator, criterion),
             NoopOptimizer(),
             NoopScheduler(),
-            mode='eval'
+            mode="eval",
         )
         print(sloss)
         torch.cuda.empty_cache()
     file_path = "%sfinal.pt" % file_prefix
     torch.save(model, file_path)
-    wandb.log_artifact(file_path, name='final_model', type='model') 
+    wandb.log_artifact(file_path, name="final_model", type="model")
     return model
 
 
@@ -1602,13 +1605,15 @@ create_model = True
 devices = range(torch.cuda.device_count())
 
 config = {
-    'batch_size': 112,
-    'num_epochs': 20,
-    'accum_iter': 4,
-    'base_lr': 1.0,
-    'max_padding': 72,
-    'warmup': 2000,
-    'file_prefix': 'iwslt_'
+    # "batch_size": 112,
+    "batch_size": 16,
+    "num_epochs": 20,
+    # "accum_iter": 4,
+    "accum_iter": 50,
+    "base_lr": 1.0,
+    "max_padding": 72,
+    "warmup": 2000,
+    "file_prefix": "iwslt_",
 }
 
 # for debugging - remove later
@@ -1617,51 +1622,47 @@ wandb.init(project="at2021", entity="avh", config=config)
 
 if create_model:
     # effective batch size = accum_iter x batch_size
-    model = train_model(
-        vocab_src,
-        vocab_tgt,
-        devices,
-        **config
-    )
+    model = train_model(vocab_src, vocab_tgt, devices, **config)
 else:
     model = torch.load("iwslt.pt")
 
 # %%
-#del train_dataloader
-#del valid_dataloader
-#del model
+# del train_dataloader
+# del valid_dataloader
+# del model
 torch.cuda.empty_cache()
 GPUtil.showUCtilization()
 
 
 # %%
-def check_outputs(
-    model,
-    vocab_src,
-    vocab_tgt
-):
-    
+def check_outputs(model, vocab_src, vocab_tgt):
+
     train_dataloader, valid_dataloader = create_dataloaders(
         # batch_size=batch_size
-        torch.device('cpu'),
+        torch.device("cpu"),
         batch_size=1,
     )
-    
+
     for _ in range(10):
-        pad_idx = vocab_tgt["<blank>"]        
+        pad_idx = vocab_tgt["<blank>"]
         b = next(iter(valid_dataloader))
         rb = rebatch(pad_idx, b)
 
         print("Source Text (Input):")
-        print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
+        print(" ".join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
         print("Target Text (Ground Truth):")
-        print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
+        print(
+            " ".join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2])
+        )
         print("Model Output:")
         model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 1)[0]
-        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != 2])
+        model_txt = " ".join(
+            [vocab_tgt.get_itos()[x] for x in model_out if x != 2]
+        )
         print(model_txt)
 
-# check_outputs(model, vocab_src, vocab_tgt)    
+
+# check_outputs(model, vocab_src, vocab_tgt)
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
