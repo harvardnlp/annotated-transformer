@@ -900,7 +900,7 @@ def run_epoch(
     scheduler,
     mode="train",
     accum_iter=1,
-    train_state = TrainState()
+    train_state=TrainState(),
 ):
     "Standard Training and Logging Function"
     start = time.time()
@@ -914,9 +914,9 @@ def run_epoch(
         )
         loss, loss_node = loss_compute(out, batch.tgt_y, batch.ntokens)
         # loss_node = loss_node / accum_iter
-        if (mode == "train" or mode == "train+log"):
+        if mode == "train" or mode == "train+log":
             loss_node.backward()
-            train_state.step +=1
+            train_state.step += 1
             train_state.samples += batch.src.shape[0]
             train_state.tokens += batch.ntokens
             if i % accum_iter == 0:
@@ -943,10 +943,10 @@ def run_epoch(
                     "total_microbatch_step": train_state.step,
                     "total_accum_step": train_state.accum_step,
                     "total_samples": train_state.samples,
-                    "total_tokens": train_state.tokens
+                    "total_tokens": train_state.tokens,
                 }
             )
-        if i % 20 == 1 and mode == "train":
+        if i % 20 == 1 and (mode == "train" or mode == "train+log"):
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
@@ -1583,7 +1583,7 @@ def train_model(
             lr_scheduler,
             mode="train+log",
             accum_iter=accum_iter,
-            train_state=train_state
+            train_state=train_state,
         )
 
         GPUtil.showUtilization()
@@ -1640,9 +1640,6 @@ else:
     model = torch.load("iwslt.pt")
 
 # %%
-# del train_dataloader
-# del valid_dataloader
-# del model
 torch.cuda.empty_cache()
 GPUtil.showUCtilization()
 
