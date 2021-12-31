@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.0
+#       jupytext_version: 1.13.4
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -333,7 +333,7 @@ class EncoderLayer(nn.Module):
 # The decoder is also composed of a stack of $N=6$ identical layers.
 #
 
-# %% id="YE2KBGZETsqF"
+# %%
 class Decoder(nn.Module):
     "Generic N layer decoder with masking."
 
@@ -810,12 +810,12 @@ def inference_test(tmp_model):
     src_mask = torch.ones(1, 1, 10)
 
     memory = tmp_model.encode(src, src_mask)
-    ys = torch.ones(1, 1).fill_(1).type_as(src)
+    ys = torch.zeros(1,1).type_as(src)
 
-    for i in range(10 - 1):
+    for i in range(10 - 1):        
         out = tmp_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
-        )
+        )        
         prob = tmp_model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
@@ -832,7 +832,8 @@ def run_tests():
         inference_test(tmp_model)
 
 
-# show_example(run_tests)
+show_example(run_tests)
+
 
 # %% [markdown]
 # # Tutorial 2: Training
@@ -1296,7 +1297,7 @@ class SimpleLossCompute:
 # %% id="N2UOpnT3bIyU"
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
-    ys = torch.ones(1, 1).fill_(start_symbol).type_as(src.data)
+    ys = torch.zeros(1, 1).fill_(start_symbol).type_as(src.data)
     for i in range(max_len - 1):
         out = model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
@@ -1305,7 +1306,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
         ys = torch.cat(
-            [ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1
+            [ys, torch.zeros(1, 1).type_as(src.data).fill_(next_word)], dim=1
         )
     return ys
 
@@ -1348,13 +1349,13 @@ def example_simple_model():
                 NoopOptimizer(),
                 NoopScheduler(),
                 mode="eval",
-            )
+            )[0]
         )
 
     model.eval()
-    src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
+    src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
     src_mask = torch.ones(1, 1, 10)
-    print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=1))
+    print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=0))
 
 
 # train_example(example_simple_model)
@@ -1423,10 +1424,6 @@ def build_vocabulary():
     vocab_src.set_default_index(vocab_src["<unk>"])
     vocab_tgt.set_default_index(vocab_tgt["<unk>"])
 
-    print("Finished.\nVocabulary sizes:")
-    print(len(vocab_src))
-    print(len(vocab_tgt))
-
     return vocab_src, vocab_tgt
 
 
@@ -1435,6 +1432,10 @@ if not exists("vocab.pt"):
     torch.save((vocab_src, vocab_tgt), "vocab.pt")
 else:
     vocab_src, vocab_tgt = torch.load("vocab.pt")
+    
+print("Finished.\nVocabulary sizes:")
+print(len(vocab_src))
+print(len(vocab_tgt))
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1459,18 +1460,20 @@ def collate_batch(
     max_padding=128,
     pad_id=2,
 ):
+    bs_id = torch.tensor([0], device=device) # <s> token id
+    eos_id = torch.tensor([1], device=device) # </s> token id
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
-        processed_src = torch.tensor(
+        processed_src = torch.cat([bs_id, torch.tensor(
             src_vocab(src_pipeline(_src)), dtype=torch.int64, device=device
-        )
-        processed_tgt = torch.tensor(
+        ), eos_id], 0)
+        processed_tgt = torch.cat([bs_id, torch.tensor(
             tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64, device=device
-        )
+        ), eos_id], 0)        
         src_list.append(
             pad(
                 processed_src,
-                (0, max_padding - len(processed_src)),
+                (0, max_padding - len(processed_src)), # warning - unsafe for negative values of padding - len - overwrites content
                 value=pad_id,
             )
         )
@@ -1483,7 +1486,7 @@ def collate_batch(
         )
 
     src = torch.stack(src_list)
-    tgt = torch.stack(tgt_list)
+    tgt = torch.stack(tgt_list)    
     return (src, tgt)
     # return src.to(device), tgt.to(device)
 
@@ -1612,20 +1615,20 @@ def train_model(
 
 
 # %%
-# assert(False)
+assert(False)
 
 # %% tags=[]
 create_model = True
 devices = range(torch.cuda.device_count())
 
 config = {
-    "batch_size": 64,
-    "num_epochs": 20,
+    "batch_size": 96,
+    "num_epochs": 50,
     # "accum_iter": 4,
-    "accum_iter": 20,
+    "accum_iter": 5,
     "base_lr": 1.0,
     "max_padding": 72,
-    "warmup": 2000,
+    "warmup": 3000,
     "file_prefix": "iwslt_",
 }
 
@@ -1665,7 +1668,7 @@ def check_outputs(model, vocab_src, vocab_tgt):
             " ".join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2])
         )
         print("Model Output:")
-        model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 1)[0]
+        model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 0)[0]
         model_txt = " ".join(
             [vocab_tgt.get_itos()[x] for x in model_out if x != 2]
         )
@@ -1991,3 +1994,24 @@ def example_attention(model, tgt_sent):
 # > srush
 # %% [markdown]
 #
+
+# %%
+train_dataloader, valid_dataloader = create_dataloaders(
+    # batch_size=batch_size
+    torch.device('cpu'),
+    batch_size=1,
+)
+
+# %%
+pad_idx = 2
+b = next(iter(valid_dataloader))
+rb = Batch(b[0], b[1], pad_idx)
+
+print("Source Text (Input):")
+print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
+print("Target Text (Ground Truth):")
+print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
+
+print(rb.src[0])
+print(rb.tgt_y[0])
+print(rb.tgt_mask)
