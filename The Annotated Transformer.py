@@ -810,12 +810,12 @@ def inference_test(tmp_model):
     src_mask = torch.ones(1, 1, 10)
 
     memory = tmp_model.encode(src, src_mask)
-    ys = torch.zeros(1,1).type_as(src)
+    ys = torch.zeros(1, 1).type_as(src)
 
-    for i in range(10 - 1):        
+    for i in range(10 - 1):
         out = tmp_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
-        )        
+        )
         prob = tmp_model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
@@ -1237,10 +1237,7 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(
-            x="Steps",
-            y="Loss",
-        )
+        .encode(x="Steps", y="Loss",)
     )
 
 
@@ -1432,7 +1429,7 @@ if not exists("vocab.pt"):
     torch.save((vocab_src, vocab_tgt), "vocab.pt")
 else:
     vocab_src, vocab_tgt = torch.load("vocab.pt")
-    
+
 print("Finished.\nVocabulary sizes:")
 print(len(vocab_src))
 print(len(vocab_tgt))
@@ -1460,20 +1457,41 @@ def collate_batch(
     max_padding=128,
     pad_id=2,
 ):
-    bs_id = torch.tensor([0], device=device) # <s> token id
-    eos_id = torch.tensor([1], device=device) # </s> token id
+    bs_id = torch.tensor([0], device=device)  # <s> token id
+    eos_id = torch.tensor([1], device=device)  # </s> token id
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
-        processed_src = torch.cat([bs_id, torch.tensor(
-            src_vocab(src_pipeline(_src)), dtype=torch.int64, device=device
-        ), eos_id], 0)
-        processed_tgt = torch.cat([bs_id, torch.tensor(
-            tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64, device=device
-        ), eos_id], 0)        
+        processed_src = torch.cat(
+            [
+                bs_id,
+                torch.tensor(
+                    src_vocab(src_pipeline(_src)),
+                    dtype=torch.int64,
+                    device=device,
+                ),
+                eos_id,
+            ],
+            0,
+        )
+        processed_tgt = torch.cat(
+            [
+                bs_id,
+                torch.tensor(
+                    tgt_vocab(tgt_pipeline(_tgt)),
+                    dtype=torch.int64,
+                    device=device,
+                ),
+                eos_id,
+            ],
+            0,
+        )
         src_list.append(
             pad(
                 processed_src,
-                (0, max_padding - len(processed_src)), # warning - unsafe for negative values of padding - len - overwrites content
+                (
+                    0,
+                    max_padding - len(processed_src),
+                ),  # warning - unsafe for negative values
                 value=pad_id,
             )
         )
@@ -1486,7 +1504,7 @@ def collate_batch(
         )
 
     src = torch.stack(src_list)
-    tgt = torch.stack(tgt_list)    
+    tgt = torch.stack(tgt_list)
     return (src, tgt)
     # return src.to(device), tgt.to(device)
 
@@ -1615,7 +1633,7 @@ def train_model(
 
 
 # %%
-assert(False)
+assert False
 
 # %% tags=[]
 create_model = True
@@ -1998,7 +2016,7 @@ def example_attention(model, tgt_sent):
 # %%
 train_dataloader, valid_dataloader = create_dataloaders(
     # batch_size=batch_size
-    torch.device('cpu'),
+    torch.device("cpu"),
     batch_size=1,
 )
 
@@ -2008,9 +2026,9 @@ b = next(iter(valid_dataloader))
 rb = Batch(b[0], b[1], pad_idx)
 
 print("Source Text (Input):")
-print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
+print(" ".join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
 print("Target Text (Ground Truth):")
-print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
+print(" ".join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
 
 print(rb.src[0])
 print(rb.tgt_y[0])

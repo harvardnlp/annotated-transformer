@@ -23,7 +23,7 @@ GPUtil.showUtilization()
 vocab_tgt.get_itos()[0:10]
 
 # %%
-model = torch.load("iwslt_00.pt", map_location=torch.device('cpu')).module
+model = torch.load("iwslt_01.pt", map_location=torch.device('cpu')).module
 
 # %% jupyter={"source_hidden": true} tags=[]
 epoch = 9
