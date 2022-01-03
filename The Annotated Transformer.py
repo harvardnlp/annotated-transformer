@@ -155,7 +155,7 @@ class NoopScheduler:
 # aligned RNNs or convolution.
 
 # %% [markdown]
-# # Tutorial 1: Model Architecture
+# # Part 1: Model Architecture
 
 # %% [markdown] id="pFrPajezTsqB"
 # # Model Architecture
@@ -810,12 +810,12 @@ def inference_test(tmp_model):
     src_mask = torch.ones(1, 1, 10)
 
     memory = tmp_model.encode(src, src_mask)
-    ys = torch.zeros(1, 1).type_as(src)
+    ys = torch.zeros(1,1).type_as(src)
 
-    for i in range(10 - 1):
+    for i in range(10 - 1):        
         out = tmp_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
-        )
+        )        
         prob = tmp_model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
@@ -836,7 +836,7 @@ show_example(run_tests)
 
 
 # %% [markdown]
-# # Tutorial 2: Training
+# # Part 2: Model Training
 
 # %% [markdown] id="05s6oT9fTsqI"
 # # Training
@@ -1237,7 +1237,10 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(x="Steps", y="Loss",)
+        .encode(
+            x="Steps",
+            y="Loss",
+        )
     )
 
 
@@ -1358,7 +1361,7 @@ def example_simple_model():
 # train_example(example_simple_model)
 
 # %% [markdown] id="OpuQv2GsTsqL"
-# # Tutorial 3: A Real World Example
+# # Part 3: A Real World Example
 #
 # > Now we consider a real-world example using the IWSLT
 # > German-English Translation task. This task is much smaller than
@@ -1429,7 +1432,7 @@ if not exists("vocab.pt"):
     torch.save((vocab_src, vocab_tgt), "vocab.pt")
 else:
     vocab_src, vocab_tgt = torch.load("vocab.pt")
-
+    
 print("Finished.\nVocabulary sizes:")
 print(len(vocab_src))
 print(len(vocab_tgt))
@@ -1457,41 +1460,20 @@ def collate_batch(
     max_padding=128,
     pad_id=2,
 ):
-    bs_id = torch.tensor([0], device=device)  # <s> token id
-    eos_id = torch.tensor([1], device=device)  # </s> token id
+    bs_id = torch.tensor([0], device=device) # <s> token id
+    eos_id = torch.tensor([1], device=device) # </s> token id
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
-        processed_src = torch.cat(
-            [
-                bs_id,
-                torch.tensor(
-                    src_vocab(src_pipeline(_src)),
-                    dtype=torch.int64,
-                    device=device,
-                ),
-                eos_id,
-            ],
-            0,
-        )
-        processed_tgt = torch.cat(
-            [
-                bs_id,
-                torch.tensor(
-                    tgt_vocab(tgt_pipeline(_tgt)),
-                    dtype=torch.int64,
-                    device=device,
-                ),
-                eos_id,
-            ],
-            0,
-        )
+        processed_src = torch.cat([bs_id, torch.tensor(
+            src_vocab(src_pipeline(_src)), dtype=torch.int64, device=device
+        ), eos_id], 0)
+        processed_tgt = torch.cat([bs_id, torch.tensor(
+            tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64, device=device
+        ), eos_id], 0)        
         src_list.append(
             pad(
                 processed_src,
-                (
-                    0,
-                    max_padding - len(processed_src),
-                ),  # warning - unsafe for negative values
+                (0, max_padding - len(processed_src)), # warning - unsafe for negative values of padding - len - overwrites content
                 value=pad_id,
             )
         )
@@ -1504,7 +1486,7 @@ def collate_batch(
         )
 
     src = torch.stack(src_list)
-    tgt = torch.stack(tgt_list)
+    tgt = torch.stack(tgt_list)    
     return (src, tgt)
     # return src.to(device), tgt.to(device)
 
@@ -1633,9 +1615,9 @@ def train_model(
 
 
 # %%
-assert False
+#assert(False)
 
-# %% tags=[]
+# %% tags=[] jupyter={"outputs_hidden": true}
 create_model = True
 devices = range(torch.cuda.device_count())
 
@@ -1658,43 +1640,7 @@ if create_model:
     # effective batch size = accum_iter x batch_size
     model = train_model(vocab_src, vocab_tgt, devices, **config)
 else:
-    model = torch.load("iwslt.pt")
-
-# %%
-torch.cuda.empty_cache()
-GPUtil.showUCtilization()
-
-
-# %%
-def check_outputs(model, vocab_src, vocab_tgt):
-
-    train_dataloader, valid_dataloader = create_dataloaders(
-        # batch_size=batch_size
-        torch.device("cpu"),
-        batch_size=1,
-    )
-
-    for _ in range(10):
-        pad_idx = vocab_tgt["<blank>"]
-        b = next(iter(valid_dataloader))
-        rb = Batch(b[0], b[1], pad_idx)
-
-        print("Source Text (Input):")
-        print(" ".join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
-        print("Target Text (Ground Truth):")
-        print(
-            " ".join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2])
-        )
-        print("Model Output:")
-        model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 0)[0]
-        model_txt = " ".join(
-            [vocab_tgt.get_itos()[x] for x in model_out if x != 2]
-        )
-        print(model_txt)
-
-
-# check_outputs(model, vocab_src, vocab_tgt)
-
+    model = torch.load("iwslt_final.pt")
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
@@ -1702,52 +1648,6 @@ def check_outputs(model, vocab_src, vocab_tgt):
 # > translations. Here we simply translate the first sentence in the
 # > validation set. This dataset is pretty small so the translations
 # > with greedy search are reasonably accurate.
-
-# %% id="f0mNHT4iTsqN"
-# for i, batch in enumerate(valid_iter):
-#     src = batch.src.transpose(0, 1)[:1]
-#     src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
-#     out = greedy_decode(
-#         model, src, src_mask, max_len=60, start_symbol=TGT.vocab.stoi["<s>"]
-#     )
-#     print("Translation:", end="\t")
-#     for i in range(1, out.size(1)):
-#         sym = TGT.vocab.itos[out[0, i]]
-#         if sym == "</s>":
-#             break
-#         print(sym, end=" ")
-#     print()
-#     print("Target:", end="\t")
-#     for i in range(1, batch.tgt.size(0)):
-#         sym = TGT.vocab.itos[batch.tgt.data[i, 0]]
-#         if sym == "</s>":
-#             break
-#         print(sym, end=" ")
-#     print()
-#     break
-
-# %% id="f0mNHT4iTsqN"
-# for i, batch in enumerate(valid_iter):
-#     src = batch.src.transpose(0, 1)[:1]
-#     src_mask = (src != SRC.vocab.stoi["<blank>"]).unsqueeze(-2)
-#     out = greedy_decode(
-#         model, src, src_mask, max_len=60, start_symbol=TGT.vocab.stoi["<s>"]
-#     )
-#     print("Translation:", end="\t")
-#     for i in range(1, out.size(1)):
-#         sym = TGT.vocab.itos[out[0, i]]
-#         if sym == "</s>":
-#             break
-#         print(sym, end=" ")
-#     print()
-#     print("Target:", end="\t")
-#     for i in range(1, batch.tgt.size(0)):
-#         sym = TGT.vocab.itos[batch.tgt.data[i, 0]]
-#         if sym == "</s>":
-#             break
-#         print(sym, end=" ")
-#     print()
-#     break
 
 # %% [markdown] id="L50i0iEXTsqN"
 # # Additional Components: BPE, Search, Averaging
@@ -1843,32 +1743,40 @@ def average(model, models):
 # %% id="LHLDc7enokDB"
 # !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 
-# %% id="Y37eUkL-okDB"
-def example_greedy():
-    model, SRC, TGT = torch.load("en-de-model.pt")
+# %%
+# Load data and model for output checks
+_, valid_dataloader = create_dataloaders(
+    torch.device('cpu'),
+    batch_size=1,
+)
 
-    model.eval()
-    sent = """
-    ▁The ▁log ▁file ▁can ▁be ▁sent ▁secret ly ▁with ▁email ▁or
-    ▁FTP ▁to ▁a ▁specified ▁receiver
-    """.split()
-    src = torch.LongTensor([[SRC.stoi[w] for w in sent]])
-    src_mask = (src != SRC.stoi["<blank>"]).unsqueeze(-2)
-    out = greedy_decode(
-        model, src, src_mask, max_len=60, start_symbol=TGT.stoi["<s>"]
-    )
-    print("Translation:", end="\t")
-    trans = "<s> "
-    for i in range(1, out.size(1)):
-        sym = TGT.itos[out[0, i]]
-        if sym == "</s>":
-            break
-        trans += sym + " "
-    print(trans)
-    return trans
+model = torch.load("iwslt_final.pt", map_location=torch.device('cpu')).module
 
 
-show_example(example_greedy)
+# %%
+def check_outputs(valid_dataloader, model, vocab_src, vocab_tgt, n_examples=15, pad_idx=2, eos_string="</s>"):
+    results = [()] * n_examples
+    for idx in range(n_examples):
+        print("\nExample %d ========\n" % idx)
+        b = next(iter(valid_dataloader))
+        rb = Batch(b[0], b[1], pad_idx)        
+        greedy_decode(model, rb.src, rb.src_mask, 64, 0)[0]
+        
+        src_tokens = [vocab_src.get_itos()[x] for x in rb.src[0] if x != pad_idx]
+        tgt_tokens = [vocab_tgt.get_itos()[x] for x in rb.tgt[0] if x != pad_idx]
+
+        print("Source Text (Input)        : " + \
+                ' '.join(src_tokens).replace("\n",""))
+        print("Target Text (Ground Truth) : " + \
+                ' '.join(tgt_tokens).replace("\n",""))
+        model_out = greedy_decode(model, rb.src, rb.src_mask, 72, 0)[0]
+        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != pad_idx]).split(eos_string, 1)[0] + eos_string
+        print("Model Output               : " +  model_txt.replace("\n",""))
+        results[idx] = (rb, src_tokens, tgt_tokens, model_out, model_txt)
+    return results
+                
+example_data = check_outputs(valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5)
+
 
 # %% [markdown] id="0ZkkNTKLTsqO"
 # ## Attention Visualization
@@ -1877,129 +1785,42 @@ show_example(example_greedy)
 # > can further visualize it to see what is happening at each layer of
 # > the attention
 
-# %% id="6aS3Be3jokDB"
+# %%
+def mtx2df(m, max_row, max_col, row_tokens, col_tokens):
+    "convert a dense matrix to a data frame with row and column indices"
+    return pd.DataFrame([(r, c, float(m[r,c]), '%.3d %s' % (r, row_tokens[r]), '%.3d %s' % (c, col_tokens[c]))
+                         for r in range(m.shape[0])
+                         for c in range(m.shape[1])
+                         if r < max_row and c < max_col],
+                         # if float(m[r,c]) != 0 and r < max_row and c < max_col],
+                        columns=['row','column', 'value', 'row_token', 'col_token'])
+
+def attn_map(layer, head, row_tokens, col_tokens, max_dim=30):    
+    df = mtx2df(model.encoder.layers[layer].self_attn.attn[0, head].data, max_dim, max_dim, row_tokens, col_tokens)
+    return alt.Chart(data=df) \
+            .mark_rect() \
+            .encode(x=alt.X('col_token', axis=alt.Axis(title="")),
+                    y=alt.Y('row_token', axis=alt.Axis(title="")),
+                    color='value',                    
+                    tooltip=['row', 'column', 'value', 'row_token', 'col_token']) \
+            .properties(height=300, width=300) \
+            .interactive()            
 
 
-def example_attention(model, tgt_sent):
-    return None
-    # Atten_data = pd.concat(
-    #     [
-    #         pd.DataFrame(
-    #             {
-    #                 "Similarity_Layer1h0": model.encoder.layers[0]
-    #                 .self_attn.attn[0, h]
-    #                 .data[x, y]
-    #                 .flatten(),
-    #                 "W1": y1,
-    #                 "W2": x1,
-    #             }
-    #         )
-    #         for y, y1 in enumerate(sent)
-    #         for x, x1 in enumerate(sent)
-    #     ]
-    # )
-
-    # char = []
-    # h_char = []
-    # for layer in range(1, 6, 2):
-    #     for h in range(4):
-    #         Layer_name = "Similarity_Layer" + str(layer) + "h" + str(h)
-    #         Atten_data[Layer_name] = (
-    #             model.encoder.layers[layer] \
-    #                 .self_attn.attn[0, h].data.flatten()
-    #         )
-
-    #         base = (
-    #             alt.Chart(Atten_data)
-    #             .mark_rect(opacity=1)
-    #             .properties(height=150, width=150)
-    #             .encode(
-    #                 alt.X(
-    #                     "W2:N",
-    #                     sort=sent,
-    #                     title=None,
-    #                 ),
-    #                 alt.Y("W1:N", sort=sent, title=None),
-    #                 alt.Color(
-    #                     Layer_name + ":Q", scale=alt.Scale(scheme="darkred")
-    #                 ),
-    #             )
-    #         )
-    #         char.append(base)
-    #     h_char.append(
-    #         alt.hconcat(
-    #             char[0],
-    #             char[1],
-    #             char[2],
-    #             char[3],
-    #             title="Encoder Layer" + str(layer + 1),
-    #         )
-    #     )
-    #     char = []
-
-    # alt.vconcat(h_char[0], h_char[1], h_char[2])
-
-    # # %% id="17lYaiKDokDC"
-    # Atten_data = pd.concat(
-    #     [
-    #         pd.DataFrame(
-    #             {
-    #                 "Similarity_Layer1h0": model.decoder.layers[layer]
-    #                 .self_attn.attn[0, h]
-    #                 .data[: len(tgt_sent), : len(tgt_sent)][x, y]
-    #                 .flatten(),
-    #                 "W1": y1,
-    #                 "W2": x1,
-    #             }
-    #         )
-    #         for y, y1 in enumerate(sent)
-    #         for x, x1 in enumerate(tgt_sent)
-    #     ]
-    # )
-
-    # char = []
-    # h_char = []
-    # for layer in range(1, 6, 2):
-    #     for h in range(4):
-    #         Layer_name = "Similarity_Layer" + str(layer) + "h" + str(h)
-    #         Atten_data[Layer_name] = (
-    #             model.decoder.layers[layer]
-    #             .self_attn.attn[0, h]
-    #             .data[: len(tgt_sent), : len(sent)]
-    #             .flatten()
-    #         )
-    #         base = (
-    #             alt.Chart(Atten_data)
-    #             .mark_rect(opacity=1)
-    #             .properties(height=150, width=150)
-    #             .encode(
-    #                 alt.X(
-    #                     "W2:N",
-    #                     sort=sent,
-    #                     title=None,
-    #                 ),
-    #                 alt.Y("W1:N", sort=sent, title=None),
-    #                 alt.Color(
-    #                     Layer_name + ":Q", scale=alt.Scale(scheme="darkred")
-    #                 ),
-    #             )
-    #         )
-    #         char.append(base)
-    #     h_char.append(
-    #         alt.hconcat(
-    #             char[0],
-    #             char[1],
-    #             char[2],
-    #             char[3],
-    #             title="Decoder Layer" + str(layer + 1),
-    #         )
-    #     )
-    #     char = []
-
-    # return alt.vconcat(h_char[0], h_char[1], h_char[2])
+# %%
+def visualize_layer(layer):
+    last_example = example_data[len(example_data)-1] # batch object for the final example
+    #ntokens = last_example[0].ntokens
+    ntokens = len(last_example[1])
+    n_heads = model.encoder.layers[layer].self_attn.attn.shape[1]
+    charts = [attn_map(0, h, row_tokens=last_example[1], col_tokens=last_example[1], max_dim=ntokens) for h in range(n_heads)]
+    assert n_heads == 8
+    return alt.vconcat(charts[0] | charts[1] | charts[2] | charts[3] | charts[4] | charts[5] | charts[6] | charts[7]).properties(title="Layer %d" % layer)
 
 
-# show_example(example_attention, [model, trans.split()])
+# %%
+layer_viz = [visualize_layer(layer) for layer in range(6)]
+alt.hconcat(layer_viz[0] & layer_viz[1] & layer_viz[2] & layer_viz[3] & layer_viz[4] & layer_viz[5])
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
@@ -2010,26 +1831,3 @@ def example_attention(model, tgt_sent):
 #
 # > Cheers,
 # > srush
-# %% [markdown]
-#
-
-# %%
-train_dataloader, valid_dataloader = create_dataloaders(
-    # batch_size=batch_size
-    torch.device("cpu"),
-    batch_size=1,
-)
-
-# %%
-pad_idx = 2
-b = next(iter(valid_dataloader))
-rb = Batch(b[0], b[1], pad_idx)
-
-print("Source Text (Input):")
-print(" ".join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
-print("Target Text (Ground Truth):")
-print(" ".join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
-
-print(rb.src[0])
-print(rb.tgt_y[0])
-print(rb.tgt_mask)

@@ -23,35 +23,38 @@ GPUtil.showUtilization()
 vocab_tgt.get_itos()[0:10]
 
 # %%
-model = torch.load("iwslt_01.pt", map_location=torch.device('cpu')).module
+model = torch.load("iwslt_49.pt", map_location=torch.device('cpu')).module
 
 # %% jupyter={"source_hidden": true} tags=[]
 epoch = 9
 model = torch.load("iwslt%.2d.pt" % epoch, map_location=torch.device('cpu')).module
 
-# %% tags=[]
-train_dataloader, valid_dataloader = create_dataloaders(
-    # batch_size=batch_size
-    torch.device('cpu'),
-    batch_size=1,
-)
 
 # %%
-pad_idx = 2
-b = next(iter(valid_dataloader))
-rb = Batch(b[0], b[1], pad_idx)
+def check_outputs(model, vocab_src, vocab_tgt, n_examples=15, pad_idx=2, eos_string="</s>"):
 
-print("Source Text (Input):")
-print(' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != 2]))
-print("Target Text (Ground Truth):")
-print(' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt_y[0] if x != 2]))
-print("Model Output:")
-model_out = greedy_decode(model, rb.src, rb.src_mask, 64, 0)[0]
-model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != 2])
-print(model_txt)
+    print("Loading data...")
+    train_dataloader, valid_dataloader = create_dataloaders(
+        torch.device('cpu'),
+        batch_size=1,
+    )
 
-print(rb.src[0])
-print(rb.tgt_y[0])
-print(model_out)
+    for idx in range(1, n_examples):
+        print("\nExample %d ========\n" % idx)
+        b = next(iter(valid_dataloader))
+        rb = Batch(b[0], b[1], pad_idx)        
+        greedy_decode(model, rb.src, rb.src_mask, 64, 0)[0]
+
+        print("Source Text (Input)        : " + \
+                ' '.join([vocab_src.get_itos()[x] for x in rb.src[0] if x != pad_idx]).replace("\n",""))
+        print("Target Text (Ground Truth) : " + \
+                ' '.join([vocab_tgt.get_itos()[x] for x in rb.tgt[0] if x != pad_idx]).replace("\n",""))
+        model_out = greedy_decode(model, rb.src, rb.src_mask, 72, 0)[0]
+        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != pad_idx]).split(eos_string, 1)[0] + eos_string
+        print("Model Output               : " +  model_txt.replace("\n",""))
+                
+
+check_outputs(model, vocab_src, vocab_tgt)
+
 
 # %%
