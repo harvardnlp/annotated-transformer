@@ -810,12 +810,12 @@ def inference_test(tmp_model):
     src_mask = torch.ones(1, 1, 10)
 
     memory = tmp_model.encode(src, src_mask)
-    ys = torch.zeros(1,1).type_as(src)
+    ys = torch.zeros(1, 1).type_as(src)
 
-    for i in range(10 - 1):        
+    for i in range(10 - 1):
         out = tmp_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
-        )        
+        )
         prob = tmp_model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
@@ -1237,10 +1237,7 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(
-            x="Steps",
-            y="Loss",
-        )
+        .encode(x="Steps", y="Loss",)
     )
 
 
@@ -1432,7 +1429,7 @@ if not exists("vocab.pt"):
     torch.save((vocab_src, vocab_tgt), "vocab.pt")
 else:
     vocab_src, vocab_tgt = torch.load("vocab.pt")
-    
+
 print("Finished.\nVocabulary sizes:")
 print(len(vocab_src))
 print(len(vocab_tgt))
@@ -1460,20 +1457,39 @@ def collate_batch(
     max_padding=128,
     pad_id=2,
 ):
-    bs_id = torch.tensor([0], device=device) # <s> token id
-    eos_id = torch.tensor([1], device=device) # </s> token id
+    bs_id = torch.tensor([0], device=device)  # <s> token id
+    eos_id = torch.tensor([1], device=device)  # </s> token id
     src_list, tgt_list = [], []
     for (_src, _tgt) in batch:
-        processed_src = torch.cat([bs_id, torch.tensor(
-            src_vocab(src_pipeline(_src)), dtype=torch.int64, device=device
-        ), eos_id], 0)
-        processed_tgt = torch.cat([bs_id, torch.tensor(
-            tgt_vocab(tgt_pipeline(_tgt)), dtype=torch.int64, device=device
-        ), eos_id], 0)        
+        processed_src = torch.cat(
+            [
+                bs_id,
+                torch.tensor(
+                    src_vocab(src_pipeline(_src)),
+                    dtype=torch.int64,
+                    device=device,
+                ),
+                eos_id,
+            ],
+            0,
+        )
+        processed_tgt = torch.cat(
+            [
+                bs_id,
+                torch.tensor(
+                    tgt_vocab(tgt_pipeline(_tgt)),
+                    dtype=torch.int64,
+                    device=device,
+                ),
+                eos_id,
+            ],
+            0,
+        )
         src_list.append(
+            # warning - overwrites values for negative values of padding - len
             pad(
                 processed_src,
-                (0, max_padding - len(processed_src)), # warning - unsafe for negative values of padding - len - overwrites content
+                (0, max_padding - len(processed_src),),
                 value=pad_id,
             )
         )
@@ -1486,7 +1502,7 @@ def collate_batch(
         )
 
     src = torch.stack(src_list)
-    tgt = torch.stack(tgt_list)    
+    tgt = torch.stack(tgt_list)
     return (src, tgt)
     # return src.to(device), tgt.to(device)
 
@@ -1615,7 +1631,7 @@ def train_model(
 
 
 # %%
-#assert(False)
+# assert(False)
 
 # %% tags=[] jupyter={"outputs_hidden": true}
 create_model = True
@@ -1745,37 +1761,58 @@ def average(model, models):
 
 # %%
 # Load data and model for output checks
-_, valid_dataloader = create_dataloaders(
-    torch.device('cpu'),
-    batch_size=1,
-)
+_, valid_dataloader = create_dataloaders(torch.device("cpu"), batch_size=1,)
 
-model = torch.load("iwslt_final.pt", map_location=torch.device('cpu')).module
+model = torch.load("iwslt_final.pt", map_location=torch.device("cpu")).module
 
 
 # %%
-def check_outputs(valid_dataloader, model, vocab_src, vocab_tgt, n_examples=15, pad_idx=2, eos_string="</s>"):
+def check_outputs(
+    valid_dataloader,
+    model,
+    vocab_src,
+    vocab_tgt,
+    n_examples=15,
+    pad_idx=2,
+    eos_string="</s>",
+):
     results = [()] * n_examples
     for idx in range(n_examples):
         print("\nExample %d ========\n" % idx)
         b = next(iter(valid_dataloader))
-        rb = Batch(b[0], b[1], pad_idx)        
+        rb = Batch(b[0], b[1], pad_idx)
         greedy_decode(model, rb.src, rb.src_mask, 64, 0)[0]
-        
-        src_tokens = [vocab_src.get_itos()[x] for x in rb.src[0] if x != pad_idx]
-        tgt_tokens = [vocab_tgt.get_itos()[x] for x in rb.tgt[0] if x != pad_idx]
 
-        print("Source Text (Input)        : " + \
-                ' '.join(src_tokens).replace("\n",""))
-        print("Target Text (Ground Truth) : " + \
-                ' '.join(tgt_tokens).replace("\n",""))
+        src_tokens = [
+            vocab_src.get_itos()[x] for x in rb.src[0] if x != pad_idx
+        ]
+        tgt_tokens = [
+            vocab_tgt.get_itos()[x] for x in rb.tgt[0] if x != pad_idx
+        ]
+
+        print(
+            "Source Text (Input)        : "
+            + " ".join(src_tokens).replace("\n", "")
+        )
+        print(
+            "Target Text (Ground Truth) : "
+            + " ".join(tgt_tokens).replace("\n", "")
+        )
         model_out = greedy_decode(model, rb.src, rb.src_mask, 72, 0)[0]
-        model_txt = ' '.join([vocab_tgt.get_itos()[x] for x in model_out if x != pad_idx]).split(eos_string, 1)[0] + eos_string
-        print("Model Output               : " +  model_txt.replace("\n",""))
+        model_txt = (
+            " ".join(
+                [vocab_tgt.get_itos()[x] for x in model_out if x != pad_idx]
+            ).split(eos_string, 1)[0]
+            + eos_string
+        )
+        print("Model Output               : " + model_txt.replace("\n", ""))
         results[idx] = (rb, src_tokens, tgt_tokens, model_out, model_txt)
     return results
-                
-example_data = check_outputs(valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5)
+
+
+example_data = check_outputs(
+    valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
+)
 
 
 # %% [markdown] id="0ZkkNTKLTsqO"
@@ -1788,39 +1825,87 @@ example_data = check_outputs(valid_dataloader, model, vocab_src, vocab_tgt, n_ex
 # %%
 def mtx2df(m, max_row, max_col, row_tokens, col_tokens):
     "convert a dense matrix to a data frame with row and column indices"
-    return pd.DataFrame([(r, c, float(m[r,c]), '%.3d %s' % (r, row_tokens[r]), '%.3d %s' % (c, col_tokens[c]))
-                         for r in range(m.shape[0])
-                         for c in range(m.shape[1])
-                         if r < max_row and c < max_col],
-                         # if float(m[r,c]) != 0 and r < max_row and c < max_col],
-                        columns=['row','column', 'value', 'row_token', 'col_token'])
+    return pd.DataFrame(
+        [
+            (
+                r,
+                c,
+                float(m[r, c]),
+                "%.3d %s" % (r, row_tokens[r]),
+                "%.3d %s" % (c, col_tokens[c]),
+            )
+            for r in range(m.shape[0])
+            for c in range(m.shape[1])
+            if r < max_row and c < max_col
+        ],
+        # if float(m[r,c]) != 0 and r < max_row and c < max_col],
+        columns=["row", "column", "value", "row_token", "col_token"],
+    )
 
-def attn_map(layer, head, row_tokens, col_tokens, max_dim=30):    
-    df = mtx2df(model.encoder.layers[layer].self_attn.attn[0, head].data, max_dim, max_dim, row_tokens, col_tokens)
-    return alt.Chart(data=df) \
-            .mark_rect() \
-            .encode(x=alt.X('col_token', axis=alt.Axis(title="")),
-                    y=alt.Y('row_token', axis=alt.Axis(title="")),
-                    color='value',                    
-                    tooltip=['row', 'column', 'value', 'row_token', 'col_token']) \
-            .properties(height=300, width=300) \
-            .interactive()            
+
+def attn_map(layer, head, row_tokens, col_tokens, max_dim=30):
+    df = mtx2df(
+        model.encoder.layers[layer].self_attn.attn[0, head].data,
+        max_dim,
+        max_dim,
+        row_tokens,
+        col_tokens,
+    )
+    return (
+        alt.Chart(data=df)
+        .mark_rect()
+        .encode(
+            x=alt.X("col_token", axis=alt.Axis(title="")),
+            y=alt.Y("row_token", axis=alt.Axis(title="")),
+            color="value",
+            tooltip=["row", "column", "value", "row_token", "col_token"],
+        )
+        .properties(height=300, width=300)
+        .interactive()
+    )
 
 
 # %%
 def visualize_layer(layer):
-    last_example = example_data[len(example_data)-1] # batch object for the final example
-    #ntokens = last_example[0].ntokens
+    last_example = example_data[
+        len(example_data) - 1
+    ]  # batch object for the final example
+    # ntokens = last_example[0].ntokens
     ntokens = len(last_example[1])
     n_heads = model.encoder.layers[layer].self_attn.attn.shape[1]
-    charts = [attn_map(0, h, row_tokens=last_example[1], col_tokens=last_example[1], max_dim=ntokens) for h in range(n_heads)]
+    charts = [
+        attn_map(
+            0,
+            h,
+            row_tokens=last_example[1],
+            col_tokens=last_example[1],
+            max_dim=ntokens,
+        )
+        for h in range(n_heads)
+    ]
     assert n_heads == 8
-    return alt.vconcat(charts[0] | charts[1] | charts[2] | charts[3] | charts[4] | charts[5] | charts[6] | charts[7]).properties(title="Layer %d" % layer)
+    return alt.vconcat(
+        charts[0]
+        | charts[1]
+        | charts[2]
+        | charts[3]
+        | charts[4]
+        | charts[5]
+        | charts[6]
+        | charts[7]
+    ).properties(title="Layer %d" % layer)
 
 
 # %%
 layer_viz = [visualize_layer(layer) for layer in range(6)]
-alt.hconcat(layer_viz[0] & layer_viz[1] & layer_viz[2] & layer_viz[3] & layer_viz[4] & layer_viz[5])
+alt.hconcat(
+    layer_viz[0]
+    & layer_viz[1]
+    & layer_viz[2]
+    & layer_viz[3]
+    & layer_viz[4]
+    & layer_viz[5]
+)
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
