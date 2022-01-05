@@ -1757,7 +1757,7 @@ def average(model, models):
 # > parameters to our reimplemenation.
 
 # %% id="LHLDc7enokDB"
-# !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
+# # !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
 
 # %%
 # Load data and model for output checks
@@ -1831,8 +1831,8 @@ def mtx2df(m, max_row, max_col, row_tokens, col_tokens):
                 r,
                 c,
                 float(m[r, c]),
-                "%.3d %s" % (r, row_tokens[r]),
-                "%.3d %s" % (c, col_tokens[c]),
+                "%.3d %s" % (r, row_tokens[r] if len(row_tokens) > r else "<blank>"),
+                "%.3d %s" % (c, col_tokens[c] if len(col_tokens) > c else "<blank>"),
             )
             for r in range(m.shape[0])
             for c in range(m.shape[1])
@@ -1843,9 +1843,9 @@ def mtx2df(m, max_row, max_col, row_tokens, col_tokens):
     )
 
 
-def attn_map(layer, head, row_tokens, col_tokens, max_dim=30):
+def attn_map(attn, layer, head, row_tokens, col_tokens, max_dim=30):
     df = mtx2df(
-        model.encoder.layers[layer].self_attn.attn[0, head].data,
+        attn[0, head].data,
         max_dim,
         max_dim,
         row_tokens,
@@ -1860,25 +1860,32 @@ def attn_map(layer, head, row_tokens, col_tokens, max_dim=30):
             color="value",
             tooltip=["row", "column", "value", "row_token", "col_token"],
         )
-        .properties(height=300, width=300)
+        .properties(height=200, width=200)
         .interactive()
     )
 
 
-# %%
-def visualize_layer(layer):
-    last_example = example_data[
-        len(example_data) - 1
-    ]  # batch object for the final example
+# %% tags=[]
+def get_encoder(model, layer):
+    return model.encoder.layers[layer].self_attn.attn
+
+def get_decoder_self(model, layer):
+    return model.decoder.layers[layer].self_attn.attn
+
+def get_decoder_src(model, layer):
+    return model.decoder.layers[layer].src_attn.attn
+
+def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
     # ntokens = last_example[0].ntokens
-    ntokens = len(last_example[1])
-    n_heads = model.encoder.layers[layer].self_attn.attn.shape[1]
+    attn = getter_fn(model, layer)
+    n_heads = attn.shape[1]
     charts = [
         attn_map(
+            attn,
             0,
             h,
-            row_tokens=last_example[1],
-            col_tokens=last_example[1],
+            row_tokens=row_tokens,
+            col_tokens=col_tokens,
             max_dim=ntokens,
         )
         for h in range(n_heads)
@@ -1893,11 +1900,48 @@ def visualize_layer(layer):
         | charts[5]
         | charts[6]
         | charts[7]
-    ).properties(title="Layer %d" % layer)
+        #layer + 1 due to 0-indexing 
+    ).properties(title="Layer %d" % (layer + 1)) 
 
 
-# %%
-layer_viz = [visualize_layer(layer) for layer in range(6)]
+# %% [markdown]
+# ## Encoder Self Attention
+
+# %% tags=[]
+example = example_data[
+    len(example_data) - 1
+]  # batch object for the final example
+
+
+layer_viz = [visualize_layer(model, layer, get_encoder, len(example[1]), example[1], example[1])  for layer in range(6)]
+alt.hconcat(
+    layer_viz[0]
+    & layer_viz[1]
+    & layer_viz[2]
+    & layer_viz[3]
+    & layer_viz[4]
+    & layer_viz[5]
+)
+
+# %% [markdown]
+# ## Decoder Self Attention
+
+# %% tags=[]
+layer_viz = [visualize_layer(model, layer, get_decoder_self, len(example[1]), example[1], example[1])  for layer in range(6)]
+alt.hconcat(
+    layer_viz[0]
+    & layer_viz[1]
+    & layer_viz[2]
+    & layer_viz[3]
+    & layer_viz[4]
+    & layer_viz[5]
+)
+
+# %% [markdown]
+# ## Decoder Src Attention
+
+# %% tags=[]
+layer_viz = [visualize_layer(model, layer, get_decoder_src, max(len(example[1]), len(example[2])), example[1], example[2])  for layer in range(6)]
 alt.hconcat(
     layer_viz[0]
     & layer_viz[1]
@@ -1916,3 +1960,5 @@ alt.hconcat(
 #
 # > Cheers,
 # > srush
+
+# %%
