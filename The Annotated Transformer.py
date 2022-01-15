@@ -104,9 +104,6 @@ class NoopOptimizer(torch.optim.Optimizer):
 
 
 class NoopScheduler:
-    def __init__(self):
-        None
-
     def step(self):
         None
 
@@ -730,7 +727,7 @@ def example_positional():
             pd.DataFrame(
                 {
                     "embedding": y[0, :, dim],
-                    "dim": dim,
+                    "dimension": dim,
                     "position": list(range(100)),
                 }
             )
@@ -741,12 +738,13 @@ def example_positional():
     return (
         alt.Chart(data)
         .mark_line()
-        .properties(width=600)
-        .encode(x="position", y="embedding", color="dim:N")
+        .properties(width=800)
+        .encode(x="position", y="embedding", color="dimension:N")
     )
 
 
-# show_example(example_positional)
+show_example(example_positional)
+
 
 # %% [markdown] id="g8rZNCrzTsqI"
 #
@@ -804,15 +802,16 @@ tmp_model = make_model(11, 11, 2)
 # from 1 to 10.
 
 # %%
-def inference_test(tmp_model):
+def inference_test():
+    tmp_model = make_model(11, 11, 2)
     tmp_model.eval()
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
 
     memory = tmp_model.encode(src, src_mask)
     ys = torch.zeros(1, 1).type_as(src)
-
-    for i in range(10 - 1):
+    
+    for i in range(9):
         out = tmp_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
         )
@@ -820,16 +819,15 @@ def inference_test(tmp_model):
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
         ys = torch.cat(
-            [ys, torch.ones(1, 1).type_as(src.data).fill_(next_word)], dim=1
+            [ys, torch.empty(1, 1).type_as(src.data).fill_(next_word)], dim=1
         )
 
-    print("Untrained Model Prediction", ys)
+    print("Example Untrained Model Prediction:", ys)
 
 
 def run_tests():
     for _ in range(10):
-        tmp_model = make_model(11, 11, 2)
-        inference_test(tmp_model)
+        inference_test()
 
 
 show_example(run_tests)
@@ -855,7 +853,7 @@ show_example(run_tests)
 
 # %%
 class Batch:
-    "Object for holding a batch of data with mask during training."
+    """Object for holding a batch of data with mask during training."""
 
     def __init__(self, src, tgt=None, pad=2):  # 2 = <blank> for IWST
         self.src = src
@@ -887,10 +885,11 @@ class Batch:
 
 # %%
 class TrainState:
-    step: int = 0
-    accum_step: int = 0
-    samples: int = 0
-    tokens: int = 0
+    """Track number of steps, examples, and tokens processed in the training run"""    
+    step: int = 0 # Steps in the current epoch
+    accum_step: int = 0 # Number of gradient accumulations (ie # of batches processed). This should equal number of steps divided by the number of steps before accumulating gradienrts
+    samples: int = 0 # total # of examples used
+    tokens: int = 0 # total # of tokens processed
 
 
 # %% id="2HAZD3hiTsqJ"
@@ -904,7 +903,7 @@ def run_epoch(
     accum_iter=1,
     train_state=TrainState(),
 ):
-    "Standard Training and Logging Function"
+    """Train a single epoch"""
     start = time.time()
     total_tokens = 0
     total_loss = 0
