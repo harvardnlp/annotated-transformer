@@ -810,7 +810,7 @@ def inference_test():
 
     memory = tmp_model.encode(src, src_mask)
     ys = torch.zeros(1, 1).type_as(src)
-    
+
     for i in range(9):
         out = tmp_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
@@ -885,11 +885,12 @@ class Batch:
 
 # %%
 class TrainState:
-    """Track number of steps, examples, and tokens processed in the training run"""    
-    step: int = 0 # Steps in the current epoch
-    accum_step: int = 0 # Number of gradient accumulations (ie # of batches processed). This should equal number of steps divided by the number of steps before accumulating gradienrts
-    samples: int = 0 # total # of examples used
-    tokens: int = 0 # total # of tokens processed
+    """Track number of steps, examples, and tokens processed"""
+
+    step: int = 0  # Steps in the current epoch
+    accum_step: int = 0  # Number of gradient accumulation steps
+    samples: int = 0  # total # of examples used
+    tokens: int = 0  # total # of tokens processed
 
 
 # %% id="2HAZD3hiTsqJ"
