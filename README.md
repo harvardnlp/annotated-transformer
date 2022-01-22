@@ -2,16 +2,20 @@ Code for The Annotated Transformer blog post:
 
 http://nlp.seas.harvard.edu/2018/04/03/attention.html
 
-To produce the `.ipynb` notebook file using the markdown source, run:
+# Setup
+
+The Annotated Transformer is created using [jupytext](https://github.com/mwouts/jupytext).
+
+Regular notebooks pose problems for source control - cell outputs end up in the repo history and diffs between commits are difficult to examine. Using jupytext, there is a python script (`.py` file) that is automatically kept in sync with the notebook file by the jupytext plugin.
+
+The python script is committed contains all the cell content and can be used to generate the notebook file. The python script is a regular python source file, markdown sections are included using a standard comment convention, and outputs are not saved. The notebook itself is treated as a build artifact and is not commited to the git repository.
+
+Prior to using this repo, make sure jupytext is installed by following the [installation instructions here](https://github.com/mwouts/jupytext/blob/main/docs/install.md).
+
+To produce the `.ipynb` notebook file using the markdown source, run (under the hood, the `notebook` build target simply runs `jupytext --to ipynb The\ Annotated\ Transformer.py`):
 
 ```
 make notebook
-```
-
-To produce the `.ipynb` notebook file using the markdown source with all cells executed, run (note that this will abort of there are any errors in the notebook):
-
-```
-make execute
 ```
 
 To produce the html version of the notebook, run:
@@ -19,3 +23,30 @@ To produce the html version of the notebook, run:
 ```
 make html
 ```
+
+`make html` is just a shortcut for for generating the notebook with `jupytext --to ipynb The\ Annotated\ Transformer.py` followed by using the jupyter nbconvert command to produce html using `jupyter nbconvert --to html The\ Annotated\ Transformer.ipynb`                             
+ 
+
+# Formatting and Linting
+
+To keep the code formatting clean, the annotated transformer git repo has a git action to check that the code conforms to [PEP8 coding standards](https://www.python.org/dev/peps/pep-0008/).
+
+To make this easier, there are two `Makefile` build targets to run automatic code formatting with black and flake8.
+
+Be sure to [install black](https://github.com/psf/black#installation) and [flake8](https://flake8.pycqa.org/en/latest/).
+
+You can then run:
+
+```
+make black
+```
+
+(or alternatively manually call black `black --line-length 79 The\ Annotated\ Transformer.py`) to format code automatically using black and:
+
+```
+make flake
+```
+
+(or manually call flake8 `flake8 --show-source The\ Annotated\ Transformer.py) to check for PEP8 violations.
+
+It's recommended to run these two commands and fix any flake8 errors that arise, when submitting a PR, otherwise the github actions CI will report an error.
