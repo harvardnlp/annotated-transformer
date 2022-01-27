@@ -1644,7 +1644,7 @@ def train_model(
             wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
-        if is_main_process == 0:
+        if is_main_process:
             print("Epoch " + str(epoch) + " Validation ====")
             model.eval()
             sloss = run_epoch(
@@ -1658,7 +1658,7 @@ def train_model(
             print(sloss)
             torch.cuda.empty_cache()
             
-    if is_main_process == 0:
+    if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
         torch.save(model, file_path)
         wandb.log_artifact(file_path, name="final_model", type="model")
