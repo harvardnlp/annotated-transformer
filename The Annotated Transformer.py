@@ -1667,7 +1667,7 @@ def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
 
 config = {
     "batch_size": 256,
-    "num_epochs": 1,
+    "num_epochs": 50,
     # "accum_iter": 4,
     "accum_iter": 5,
     "base_lr": 1.0,
