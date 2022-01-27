@@ -6,3 +6,4 @@ jupytext==1.13
 flake8
 black
 GPUtil
+wandb

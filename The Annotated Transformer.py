@@ -62,6 +62,7 @@
 # # !pip install -r requirements.txt
 
 # %% id="v1-1MX6oTsp9"
+import os
 from os.path import exists
 import torch
 import torch.nn as nn
@@ -78,6 +79,11 @@ from torchtext.vocab import build_vocab_from_iterator
 import torchtext.datasets as datasets
 import spacy
 import GPUtil
+
+from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
 
 # temporary for debugging - remove before final version
 import wandb
@@ -1508,7 +1514,7 @@ def collate_batch(
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
-def create_dataloaders(device, batch_size=12000, max_padding=128):
+def create_dataloaders(device, batch_size=12000, max_padding=128, is_distributed=True):
     # def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
@@ -1525,10 +1531,12 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
         language_pair=("de", "en")
     )
+    train_sampler = DistributedSampler(train_iter) if is_distributed else None    
     train_dataloader = DataLoader(
         to_map_style_dataset(train_iter),
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=(train_sampler is None),
+        sampler=train_sampler,
         collate_fn=collate_fn,
     )
     valid_dataloader = DataLoader(
@@ -1552,12 +1560,12 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
 
 # %% id="Kx53VVTgTsqM" tags=[]
 # #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
-
 # %%
 def train_model(
+    gpu,
+    ngpus_per_node,
     vocab_src,
     vocab_tgt,
-    devices,
     batch_size=64,
     num_epochs=10,
     accum_iter=12000 / 64,
@@ -1566,23 +1574,29 @@ def train_model(
     warmup=2000,
     file_prefix="iwslt",
 ):
+    wandb.init(project="at2021", entity="subramen", group="DDP")
+    print(f"Using GPU: {gpu} for training")
+    dist.init_process_group('nccl', init_method='env://', rank=gpu, world_size=ngpus_per_node)
+    torch.cuda.set_device(gpu)
+    is_main_process = gpu == 0
+
     pad_idx = vocab_tgt["<blank>"]
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model = nn.DataParallel(model_init, device_ids=devices)
-    wandb.watch(model.module)
+    model = DDP(model_init, device_ids=[gpu])
+    wandb.watch(model)
     d_model = 512
-    model_init.cuda()
+    model_init.cuda(gpu)
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
-    criterion.cuda()
+    criterion.cuda(gpu)
     train_dataloader, valid_dataloader = create_dataloaders(
         # batch_size=batch_size
-        devices[0],
-        batch_size=batch_size,
+        gpu, 
+        batch_size=batch_size // ngpus_per_node,
         max_padding=max_padding,
     )
-
+    
     optimizer = torch.optim.Adam(
         model.parameters(), lr=base_lr, betas=(0.9, 0.98), eps=1e-9
     )
@@ -1592,7 +1606,10 @@ def train_model(
     )
     train_state = TrainState()
     for epoch in range(num_epochs):
-        wandb.log({"epoch": epoch})
+        train_dataloader.sampler.set_epoch(epoch)
+        if is_main_process: 
+            wandb.log({"epoch": epoch})
+        
         model.train()
         print("Epoch " + str(epoch) + " Training ====")
         _, train_state = run_epoch(
@@ -1607,26 +1624,30 @@ def train_model(
         )
 
         GPUtil.showUtilization()
-        file_path = "%s%.2d.pt" % (file_prefix, epoch)
-        torch.save(model, file_path)
-        wandb.log_artifact(file_path, name=file_path, type="model")
+        if is_main_process == 0:
+            file_path = "%s%.2d.pt" % (file_prefix, epoch)
+            torch.save(model, file_path)
+            wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
-        print("Epoch " + str(epoch) + " Validation ====")
-        model.eval()
-        sloss = run_epoch(
-            (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
-            model,
-            SimpleLossCompute(model.module.generator, criterion),
-            NoopOptimizer(),
-            NoopScheduler(),
-            mode="eval",
-        )
-        print(sloss)
-        torch.cuda.empty_cache()
-    file_path = "%sfinal.pt" % file_prefix
-    torch.save(model, file_path)
-    wandb.log_artifact(file_path, name="final_model", type="model")
+        if is_main_process == 0:
+            print("Epoch " + str(epoch) + " Validation ====")
+            model.eval()
+            sloss = run_epoch(
+                (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
+                model,
+                SimpleLossCompute(model.module.generator, criterion),
+                NoopOptimizer(),
+                NoopScheduler(),
+                mode="eval",
+            )
+            print(sloss)
+            torch.cuda.empty_cache()
+            
+    if is_main_process == 0:
+        file_path = "%sfinal.pt" % file_prefix
+        torch.save(model, file_path)
+        wandb.log_artifact(file_path, name="final_model", type="model")
     return model
 
 
@@ -1635,11 +1656,18 @@ def train_model(
 
 # %% tags=[] jupyter={"outputs_hidden": true}
 create_model = True
-devices = range(torch.cuda.device_count())
+
+def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
+    # single node multi-gpu training
+    os.environ['MASTER_ADDR'] = 'localhost'
+    os.environ['MASTER_PORT'] = '12355'
+    if ngpus == None:
+        ngpus = torch.cuda.device_count()
+    mp.spawn(train_model, nprocs=ngpus, args=(ngpus, vocab_src, vocab_tgt, *train_args.values()))
 
 config = {
-    "batch_size": 96,
-    "num_epochs": 50,
+    "batch_size": 256,
+    "num_epochs": 1,
     # "accum_iter": 4,
     "accum_iter": 5,
     "base_lr": 1.0,
@@ -1648,15 +1676,14 @@ config = {
     "file_prefix": "iwslt_",
 }
 
-# for debugging - remove later
-wandb.config = config
-wandb.init(project="at2021", entity="avh", config=config)
-
-if create_model:
-    # effective batch size = accum_iter x batch_size
-    model = train_model(vocab_src, vocab_tgt, devices, **config)
-else:
-    model = torch.load("iwslt_final.pt")
+if __name__ == "__main__":
+    # for debugging - remove later
+    wandb.config = config
+    if create_model:
+        # effective batch size = accum_iter x batch_size
+        model = train_ddp(vocab_src, vocab_tgt, config)
+    else:
+        model = torch.load("iwslt_final.pt")
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
