@@ -1596,10 +1596,10 @@ def train_model(
 
     pad_idx = vocab_tgt["<blank>"]
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model_init.cuda(gpu)
     model = DDP(model_init, device_ids=[gpu])
     wandb.watch(model)
     d_model = 512
-    model_init.cuda(gpu)
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
