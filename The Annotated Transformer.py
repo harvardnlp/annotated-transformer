@@ -1243,7 +1243,10 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(x="Steps", y="Loss",)
+        .encode(
+            x="Steps",
+            y="Loss",
+        )
     )
 
 
@@ -1495,7 +1498,10 @@ def collate_batch(
             # warning - overwrites values for negative values of padding - len
             pad(
                 processed_src,
-                (0, max_padding - len(processed_src),),
+                (
+                    0,
+                    max_padding - len(processed_src),
+                ),
                 value=pad_id,
             )
         )
@@ -1514,7 +1520,9 @@ def collate_batch(
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
-def create_dataloaders(device, batch_size=12000, max_padding=128, is_distributed=True):
+def create_dataloaders(
+    device, batch_size=12000, max_padding=128, is_distributed=True
+):
     # def create_dataloaders(batch_size=12000):
     def collate_fn(batch):
         return collate_batch(
@@ -1531,8 +1539,8 @@ def create_dataloaders(device, batch_size=12000, max_padding=128, is_distributed
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
         language_pair=("de", "en")
     )
-    train_sampler = DistributedSampler(train_iter) if is_distributed else None    
-    valid_sampler = DistributedSampler(valid_iter) if is_distributed else None    
+    train_sampler = DistributedSampler(train_iter) if is_distributed else None
+    valid_sampler = DistributedSampler(valid_iter) if is_distributed else None
 
     train_dataloader = DataLoader(
         to_map_style_dataset(train_iter),
@@ -1579,7 +1587,9 @@ def train_model(
 ):
     wandb.init(project="at2021", entity="subramen", group="DDP")
     print(f"Using GPU: {gpu} for training")
-    dist.init_process_group('nccl', init_method='env://', rank=gpu, world_size=ngpus_per_node)
+    dist.init_process_group(
+        "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
+    )
     torch.cuda.set_device(gpu)
     is_main_process = gpu == 0
 
@@ -1596,11 +1606,11 @@ def train_model(
     criterion.cuda(gpu)
     train_dataloader, valid_dataloader = create_dataloaders(
         # batch_size=batch_size
-        gpu, 
+        gpu,
         batch_size=batch_size // ngpus_per_node,
         max_padding=max_padding,
     )
-    
+
     optimizer = torch.optim.Adam(
         model.parameters(), lr=base_lr, betas=(0.9, 0.98), eps=1e-9
     )
@@ -1613,9 +1623,9 @@ def train_model(
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
 
-        if is_main_process: 
+        if is_main_process:
             wandb.log({"epoch": epoch})
-        
+
         model.train()
         print("Epoch " + str(epoch) + " Training ====")
         _, train_state = run_epoch(
@@ -1648,7 +1658,7 @@ def train_model(
         )
         print(sloss)
         torch.cuda.empty_cache()
-            
+
     if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
         torch.save(model, file_path)
@@ -1661,13 +1671,19 @@ def train_model(
 # %% tags=[] jupyter={"outputs_hidden": true}
 create_model = True
 
+
 def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
     # single node multi-gpu training
-    os.environ['MASTER_ADDR'] = 'localhost'
-    os.environ['MASTER_PORT'] = '12355'
-    if ngpus == None:
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    if ngpus is None:
         ngpus = torch.cuda.device_count()
-    mp.spawn(train_model, nprocs=ngpus, args=(ngpus, vocab_src, vocab_tgt, *train_args.values()))
+    mp.spawn(
+        train_model,
+        nprocs=ngpus,
+        args=(ngpus, vocab_src, vocab_tgt, *train_args.values()),
+    )
+
 
 config = {
     "batch_size": 320,
@@ -1792,7 +1808,10 @@ def average(model, models):
 
 # %%
 # Load data and model for output checks
-_, valid_dataloader = create_dataloaders(torch.device("cpu"), batch_size=1,)
+_, valid_dataloader = create_dataloaders(
+    torch.device("cpu"),
+    batch_size=1,
+)
 
 model = torch.load("iwslt_final.pt", map_location=torch.device("cpu")).module
 
@@ -1877,7 +1896,13 @@ def mtx2df(m, max_row, max_col, row_tokens, col_tokens):
 
 
 def attn_map(attn, layer, head, row_tokens, col_tokens, max_dim=30):
-    df = mtx2df(attn[0, head].data, max_dim, max_dim, row_tokens, col_tokens,)
+    df = mtx2df(
+        attn[0, head].data,
+        max_dim,
+        max_dim,
+        row_tokens,
+        col_tokens,
+    )
     return (
         alt.Chart(data=df)
         .mark_rect()
