@@ -1532,6 +1532,8 @@ def create_dataloaders(device, batch_size=12000, max_padding=128, is_distributed
         language_pair=("de", "en")
     )
     train_sampler = DistributedSampler(train_iter) if is_distributed else None    
+    valid_sampler = DistributedSampler(valid_iter) if is_distributed else None    
+
     train_dataloader = DataLoader(
         to_map_style_dataset(train_iter),
         batch_size=batch_size,
@@ -1542,7 +1544,8 @@ def create_dataloaders(device, batch_size=12000, max_padding=128, is_distributed
     valid_dataloader = DataLoader(
         to_map_style_dataset(valid_iter),
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=(valid_sampler is None),
+        sampler=valid_sampler,
         collate_fn=collate_fn,
     )
     return train_dataloader, valid_dataloader
@@ -1584,7 +1587,8 @@ def train_model(
     model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model_init.cuda(gpu)
     model = DDP(model_init, device_ids=[gpu])
-    wandb.watch(model)
+    if is_main_process:
+        wandb.watch(model)
     d_model = 512
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
@@ -1607,6 +1611,8 @@ def train_model(
     train_state = TrainState()
     for epoch in range(num_epochs):
         train_dataloader.sampler.set_epoch(epoch)
+        valid_dataloader.sampler.set_epoch(epoch)
+
         if is_main_process: 
             wandb.log({"epoch": epoch})
         
@@ -1624,31 +1630,29 @@ def train_model(
         )
 
         GPUtil.showUtilization()
-        if is_main_process == 0:
+        if is_main_process:
             file_path = "%s%.2d.pt" % (file_prefix, epoch)
             torch.save(model, file_path)
-            wandb.log_artifact(file_path, name=file_path, type="model")
+            # wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
-        if is_main_process:
-            print("Epoch " + str(epoch) + " Validation ====")
-            model.eval()
-            sloss = run_epoch(
-                (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
-                model,
-                SimpleLossCompute(model.module.generator, criterion),
-                NoopOptimizer(),
-                NoopScheduler(),
-                mode="eval",
-            )
-            print(sloss)
-            torch.cuda.empty_cache()
+        print("Epoch " + str(epoch) + " Validation ====")
+        model.eval()
+        sloss = run_epoch(
+            (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
+            model,
+            SimpleLossCompute(model.module.generator, criterion),
+            NoopOptimizer(),
+            NoopScheduler(),
+            mode="eval",
+        )
+        print(sloss)
+        torch.cuda.empty_cache()
             
     if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
         torch.save(model, file_path)
-        wandb.log_artifact(file_path, name="final_model", type="model")
-    return model
+        # wandb.log_artifact(file_path, name="final_model", type="model")
 
 
 # %%
@@ -1666,7 +1670,7 @@ def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
     mp.spawn(train_model, nprocs=ngpus, args=(ngpus, vocab_src, vocab_tgt, *train_args.values()))
 
 config = {
-    "batch_size": 256,
+    "batch_size": 320,
     "num_epochs": 50,
     # "accum_iter": 4,
     "accum_iter": 5,
@@ -1681,7 +1685,7 @@ if __name__ == "__main__":
     wandb.config = config
     if create_model:
         # effective batch size = accum_iter x batch_size
-        model = train_ddp(vocab_src, vocab_tgt, config)
+        train_ddp(vocab_src, vocab_tgt, config)
     else:
         model = torch.load("iwslt_final.pt")
 
