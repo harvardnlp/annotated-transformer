@@ -7,7 +7,7 @@
 #       extension: .py
 #       format_name: percent
 #       format_version: '1.3'
-#       jupytext_version: 1.13.4
+#       jupytext_version: 1.13.0
 #   kernelspec:
 #     display_name: Python 3 (ipykernel)
 #     language: python
@@ -63,6 +63,7 @@
 
 # %% id="v1-1MX6oTsp9"
 from os.path import exists
+import os
 import torch
 import torch.nn as nn
 from torch.nn.functional import log_softmax, pad
@@ -1366,22 +1367,30 @@ def example_simple_model():
 # > system. We also show how to use multi-gpu processing to make it
 # > really fast.
 
-# %%
-# These only need to be run once to download
-# english/german language models with spacy.
-
-# # !python -m spacy download en
-# # !python -m spacy download de
-
 # %% [markdown] id="8y9dpfolTsqL" tags=[]
 # ## Data Loading
 #
 # > We will load the dataset using torchtext and spacy for
 # > tokenization.
 
+# %%
+# Load spacy tokenizer models, download them if they haven't been downloaded already
+
+try:
+    spacy_de = spacy.load("de_core_news_sm")
+except IOError:
+    os.system("python -m spacy download de_core_news_sm")
+    spacy_de = spacy.load("de_core_news_sm")
+
+    
+try:
+    spacy_en = spacy.load("en_core_web_sm")
+except IOError:    
+    os.system("python -m spacy download en_core_web_sm")
+    spacy_en = spacy.load("en_core_web_sm")
+
+
 # %% id="t4BszXXJTsqL" tags=[]
-
-
 def tokenize_de(text):
     return [tok.text for tok in spacy_de.tokenizer(text)]
 
@@ -1396,9 +1405,6 @@ def yield_tokens(data_iter, tokenizer, index):
 
 
 # %% id="jU3kVlV5okC-" tags=[]
-spacy_de = spacy.load("de_core_news_sm")
-spacy_en = spacy.load("en_core_web_sm")
-
 
 def build_vocabulary():
 
@@ -1631,9 +1637,10 @@ def train_model(
 
 
 # %%
+# for debugging - TODO remove this before final publication
 # assert(False)
 
-# %% tags=[] jupyter={"outputs_hidden": true}
+# %% tags=[]
 create_model = True
 devices = range(torch.cuda.device_count())
 

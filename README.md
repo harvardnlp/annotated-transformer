@@ -2,7 +2,15 @@ Code for The Annotated Transformer blog post:
 
 http://nlp.seas.harvard.edu/2018/04/03/attention.html
 
-# Setup
+# Setups
+
+Use `requirements.txt` to install library dependencies with pip:
+
+```
+pip install -r requirements.txt
+```
+
+# Notebook Setup
 
 The Annotated Transformer is created using [jupytext](https://github.com/mwouts/jupytext).
 
