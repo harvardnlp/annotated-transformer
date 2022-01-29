@@ -1238,7 +1238,10 @@ def example_label_smoothing2():
         alt.Chart(loss_data)
         .mark_line()
         .properties(width=350)
-        .encode(x="Steps", y="Loss",)
+        .encode(
+            x="Steps",
+            y="Loss",
+        )
     )
 
 
@@ -1374,7 +1377,8 @@ def example_simple_model():
 # > tokenization.
 
 # %%
-# Load spacy tokenizer models, download them if they haven't been downloaded already
+# Load spacy tokenizer models, download them if they haven't been
+# downloaded already
 
 try:
     spacy_de = spacy.load("de_core_news_sm")
@@ -1382,10 +1386,10 @@ except IOError:
     os.system("python -m spacy download de_core_news_sm")
     spacy_de = spacy.load("de_core_news_sm")
 
-    
+
 try:
     spacy_en = spacy.load("en_core_web_sm")
-except IOError:    
+except IOError:
     os.system("python -m spacy download en_core_web_sm")
     spacy_en = spacy.load("en_core_web_sm")
 
@@ -1405,6 +1409,7 @@ def yield_tokens(data_iter, tokenizer, index):
 
 
 # %% id="jU3kVlV5okC-" tags=[]
+
 
 def build_vocabulary():
 
@@ -1495,7 +1500,10 @@ def collate_batch(
             # warning - overwrites values for negative values of padding - len
             pad(
                 processed_src,
-                (0, max_padding - len(processed_src),),
+                (
+                    0,
+                    max_padding - len(processed_src),
+                ),
                 value=pad_id,
             )
         )
@@ -1768,7 +1776,10 @@ def average(model, models):
 
 # %%
 # Load data and model for output checks
-_, valid_dataloader = create_dataloaders(torch.device("cpu"), batch_size=1,)
+_, valid_dataloader = create_dataloaders(
+    torch.device("cpu"),
+    batch_size=1,
+)
 
 model = torch.load("iwslt_final.pt", map_location=torch.device("cpu")).module
 
@@ -1853,7 +1864,13 @@ def mtx2df(m, max_row, max_col, row_tokens, col_tokens):
 
 
 def attn_map(attn, layer, head, row_tokens, col_tokens, max_dim=30):
-    df = mtx2df(attn[0, head].data, max_dim, max_dim, row_tokens, col_tokens,)
+    df = mtx2df(
+        attn[0, head].data,
+        max_dim,
+        max_dim,
+        row_tokens,
+        col_tokens,
+    )
     return (
         alt.Chart(data=df)
         .mark_rect()
