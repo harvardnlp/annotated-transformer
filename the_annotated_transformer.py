@@ -88,10 +88,12 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 # temporary for debugging - remove before final version
 import wandb
+IS_NOTEBOOK = False
 
 
 def show_example(fn, args=[]):
-    return fn(*args)
+    if IS_NOTEBOOK:
+        return fn(*args)
 
 
 def train_example(fn, args=[]):
@@ -1447,9 +1449,10 @@ if not exists("vocab.pt"):
 else:
     vocab_src, vocab_tgt = torch.load("vocab.pt")
 
-print("Finished.\nVocabulary sizes:")
-print(len(vocab_src))
-print(len(vocab_tgt))
+if IS_NOTEBOOK:
+    print("Finished.\nVocabulary sizes:")
+    print(len(vocab_src))
+    print(len(vocab_tgt))
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1672,6 +1675,12 @@ def train_model(
         torch.save(model, file_path)
         # wandb.log_artifact(file_path, name="final_model", type="model")
 
+    if is_main_process:
+        file_path = "%sfinal.pt" % file_prefix
+        torch.save(model, file_path)
+        # wandb.log_artifact(file_path, name="final_model", type="model")
+
+    wandb.finish()
 
 # %%
 # for debugging - TODO remove this before final publication
@@ -1682,6 +1691,10 @@ create_model = True
 
 
 def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
+    from the_annotated_transformer import (
+        train_model,
+    )  # necessary for running in ipynb
+
     # single node multi-gpu training
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
@@ -1705,7 +1718,7 @@ config = {
     "file_prefix": "iwslt_",
 }
 
-if __name__ == "__main__":
+if __name__ == "__main__" and IS_NOTEBOOK:
     # for debugging - remove later
     wandb.config = config
     if create_model:
@@ -1818,11 +1831,12 @@ def average(model, models):
 # %%
 # Load data and model for output checks
 _, valid_dataloader = create_dataloaders(
-    torch.device("cpu"),
-    batch_size=1,
+    torch.device("cpu"), batch_size=1, is_distributed=False
 )
-
-model = torch.load("iwslt_final.pt", map_location=torch.device("cpu")).module
+if IS_NOTEBOOK:
+    model = torch.load(
+        "iwslt_final.pt", map_location=torch.device("cpu")
+    ).module
 
 
 # %%
@@ -1869,9 +1883,10 @@ def check_outputs(
     return results
 
 
-example_data = check_outputs(
-    valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
-)
+if IS_NOTEBOOK:
+    example_data = check_outputs(
+        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
+    )
 
 
 # %% [markdown] id="0ZkkNTKLTsqO"
@@ -1972,68 +1987,75 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
 # ## Encoder Self Attention
 
 # %% tags=[]
-example = example_data[
-    len(example_data) - 1
-]  # batch object for the final example
+if IS_NOTEBOOK:
+    example = example_data[
+        len(example_data) - 1
+    ]  # batch object for the final example
 
-
-layer_viz = [
-    visualize_layer(
-        model, layer, get_encoder, len(example[1]), example[1], example[1]
+    layer_viz = [
+        visualize_layer(
+            model, layer, get_encoder, len(example[1]), example[1], example[1]
+        )
+        for layer in range(6)
+    ]
+    alt.hconcat(
+        layer_viz[0]
+        & layer_viz[1]
+        & layer_viz[2]
+        & layer_viz[3]
+        & layer_viz[4]
+        & layer_viz[5]
     )
-    for layer in range(6)
-]
-alt.hconcat(
-    layer_viz[0]
-    & layer_viz[1]
-    & layer_viz[2]
-    & layer_viz[3]
-    & layer_viz[4]
-    & layer_viz[5]
-)
 
 # %% [markdown]
 # ## Decoder Self Attention
 
 # %% tags=[]
-layer_viz = [
-    visualize_layer(
-        model, layer, get_decoder_self, len(example[1]), example[1], example[1]
+if IS_NOTEBOOK:
+    layer_viz = [
+        visualize_layer(
+            model,
+            layer,
+            get_decoder_self,
+            len(example[1]),
+            example[1],
+            example[1],
+        )
+        for layer in range(6)
+    ]
+    alt.hconcat(
+        layer_viz[0]
+        & layer_viz[1]
+        & layer_viz[2]
+        & layer_viz[3]
+        & layer_viz[4]
+        & layer_viz[5]
     )
-    for layer in range(6)
-]
-alt.hconcat(
-    layer_viz[0]
-    & layer_viz[1]
-    & layer_viz[2]
-    & layer_viz[3]
-    & layer_viz[4]
-    & layer_viz[5]
-)
 
 # %% [markdown]
 # ## Decoder Src Attention
 
 # %% tags=[]
-layer_viz = [
-    visualize_layer(
-        model,
-        layer,
-        get_decoder_src,
-        max(len(example[1]), len(example[2])),
-        example[1],
-        example[2],
+if IS_NOTEBOOK:
+    layer_viz = [
+        visualize_layer(
+            model,
+            layer,
+            get_decoder_src,
+            max(len(example[1]), len(example[2])),
+            example[1],
+            example[2],
+        )
+        for layer in range(6)
+    ]
+    alt.hconcat(
+        layer_viz[0]
+        & layer_viz[1]
+        & layer_viz[2]
+        & layer_viz[3]
+        & layer_viz[4]
+        & layer_viz[5]
     )
-    for layer in range(6)
-]
-alt.hconcat(
-    layer_viz[0]
-    & layer_viz[1]
-    & layer_viz[2]
-    & layer_viz[3]
-    & layer_viz[4]
-    & layer_viz[5]
-)
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion

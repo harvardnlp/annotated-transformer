@@ -20,7 +20,7 @@ The python script is committed contains all the cell content and can be used to 
 
 Prior to using this repo, make sure jupytext is installed by following the [installation instructions here](https://github.com/mwouts/jupytext/blob/main/docs/install.md).
 
-To produce the `.ipynb` notebook file using the markdown source, run (under the hood, the `notebook` build target simply runs `jupytext --to ipynb The\ Annotated\ Transformer.py`):
+To produce the `.ipynb` notebook file using the markdown source, run (under the hood, the `notebook` build target simply runs `jupytext --to ipynb the_annotated_transformer.py`):
 
 ```
 make notebook
@@ -32,7 +32,7 @@ To produce the html version of the notebook, run:
 make html
 ```
 
-`make html` is just a shortcut for for generating the notebook with `jupytext --to ipynb The\ Annotated\ Transformer.py` followed by using the jupyter nbconvert command to produce html using `jupyter nbconvert --to html The\ Annotated\ Transformer.ipynb`                             
+`make html` is just a shortcut for for generating the notebook with `jupytext --to ipynb the_annotated_transformer.py` followed by using the jupyter nbconvert command to produce html using `jupyter nbconvert --to html the_annotated_transformer.ipynb`                             
  
 
 # Formatting and Linting
@@ -49,12 +49,12 @@ You can then run:
 make black
 ```
 
-(or alternatively manually call black `black --line-length 79 The\ Annotated\ Transformer.py`) to format code automatically using black and:
+(or alternatively manually call black `black --line-length 79 the_annotated_transformer.py`) to format code automatically using black and:
 
 ```
 make flake
 ```
 
-(or manually call flake8 `flake8 --show-source The\ Annotated\ Transformer.py) to check for PEP8 violations.
+(or manually call flake8 `flake8 --show-source the_annotated_transformer.py) to check for PEP8 violations.
 
 It's recommended to run these two commands and fix any flake8 errors that arise, when submitting a PR, otherwise the github actions CI will report an error.
