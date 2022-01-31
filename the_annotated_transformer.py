@@ -64,7 +64,6 @@
 # %% id="v1-1MX6oTsp9"
 import os
 from os.path import exists
-import os
 import torch
 import torch.nn as nn
 from torch.nn.functional import log_softmax, pad
@@ -88,6 +87,7 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 
 # temporary for debugging - remove before final version
 import wandb
+
 IS_NOTEBOOK = False
 
 
@@ -1681,6 +1681,7 @@ def train_model(
         # wandb.log_artifact(file_path, name="final_model", type="model")
 
     wandb.finish()
+
 
 # %%
 # for debugging - TODO remove this before final publication
