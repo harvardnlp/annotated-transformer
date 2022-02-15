@@ -1388,6 +1388,8 @@ def example_simple_model():
 
 spacy_de = None
 spacy_en = None
+
+
 def load_tokenizers():
     global spacy_de, spacy_en
 
@@ -1397,7 +1399,6 @@ def load_tokenizers():
         os.system("python -m spacy download de_core_news_sm")
         spacy_de = spacy.load("de_core_news_sm")
 
-
     try:
         spacy_en = spacy.load("en_core_web_sm")
     except IOError:
@@ -1406,7 +1407,9 @@ def load_tokenizers():
 
 
 # %% id="t4BszXXJTsqL" tags=[]
-tokenize = lambda text, tokenizer: [tok.text for tok in tokenizer.tokenizer(text)] 
+def tokenize(text, tokenizer):
+    return [tok.text for tok in tokenizer.tokenizer(text)]
+
 
 def yield_tokens(data_iter, tokenizer, index):
     for from_to_tuple in data_iter:
@@ -1417,10 +1420,14 @@ def yield_tokens(data_iter, tokenizer, index):
 
 
 def build_vocabulary():
+    def tokenize_de(text):
+        return tokenize(text, spacy_de)
+
+    def tokenize_en(text):
+        return tokenize(text, spacy_en)
 
     print("Building German Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
-    tokenize_de = lambda text: tokenize(text, spacy_de)
     vocab_src = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_de, index=0),
         min_freq=2,
@@ -1429,7 +1436,6 @@ def build_vocabulary():
 
     print("Building English Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
-    tokenize_en = lambda text: tokenize(text, spacy_en)
     vocab_tgt = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_en, index=1),
         min_freq=2,
@@ -1441,8 +1447,11 @@ def build_vocabulary():
 
     return vocab_src, vocab_tgt
 
+
 vocab_src = None
 vocab_tgt = None
+
+
 def load_vocab():
     global vocab_src, vocab_tgt
 
@@ -1455,8 +1464,10 @@ def load_vocab():
     print(len(vocab_src))
     print(len(vocab_tgt))
 
+
 show_example(load_tokenizers)
 show_example(load_vocab)
+
 
 # %% [markdown] id="-l-TFwzfTsqL"
 #
@@ -1535,11 +1546,21 @@ def collate_batch(
 
 # %% id="ka2Ce_WIokC_" tags=[]
 def create_dataloaders(
-    device, vocab_src, vocab_tgt, spacy_de, spacy_en, batch_size=12000, max_padding=128, is_distributed=True
+    device,
+    vocab_src,
+    vocab_tgt,
+    spacy_de,
+    spacy_en,
+    batch_size=12000,
+    max_padding=128,
+    is_distributed=True,
 ):
     # def create_dataloaders(batch_size=12000):
-    tokenize_de = lambda text: tokenize(text, spacy_de)
-    tokenize_en = lambda text: tokenize(text, spacy_en)
+    def tokenize_de(text):
+        return tokenize(text, spacy_de)
+
+    def tokenize_en(text):
+        return tokenize(text, spacy_en)
 
     def collate_fn(batch):
         return collate_batch(
@@ -1574,6 +1595,7 @@ def create_dataloaders(
         collate_fn=collate_fn,
     )
     return train_dataloader, valid_dataloader
+
 
 #
 # > Now we train the model. I will play with the warmup steps a bit,
@@ -1622,7 +1644,6 @@ def train_worker(
         model = DDP(model, device_ids=[gpu])
         module = model.module
 
-
     # for debugging
     if is_main_process:
         wandb.watch(model)
@@ -1634,8 +1655,10 @@ def train_worker(
 
     train_dataloader, valid_dataloader = create_dataloaders(
         gpu,
-        vocab_src, vocab_tgt,
-        spacy_de, spacy_en,
+        vocab_src,
+        vocab_tgt,
+        spacy_de,
+        spacy_en,
         batch_size=batch_size // ngpus_per_node,
         max_padding=max_padding,
     )
@@ -1704,6 +1727,7 @@ def train_worker(
 # %% tags=[]
 create_model = True
 
+
 def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
     from the_annotated_transformer import train_worker
 
@@ -1714,10 +1738,25 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
         mp.spawn(
             train_worker,
             nprocs=ngpus,
-            args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, *train_args.values()),
+            args=(
+                ngpus,
+                vocab_src,
+                vocab_tgt,
+                spacy_de,
+                spacy_en,
+                *train_args.values(),
+            ),
         )
     else:  # single GPU
-        train_worker(0, ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, *train_args.values())
+        train_worker(
+            0,
+            ngpus,
+            vocab_src,
+            vocab_tgt,
+            spacy_de,
+            spacy_en,
+            *train_args.values(),
+        )
 
 
 def load_trained_model(create_model=True):
@@ -1732,18 +1771,17 @@ def load_trained_model(create_model=True):
     }
 
     wandb.config = config  # for debugging
-    
+
     if create_model:
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
 
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(torch.load('iwslt_sd_final.pt'))
+    model.load_state_dict(torch.load("iwslt_sd_final.pt"))
     return model
 
 
 if __name__ == "__main__":
     model = load_trained_model(create_model=True)
-
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
@@ -1851,8 +1889,6 @@ def average(model, models):
 # Load data and model for output checks
 
 
-
-
 # %%
 def check_outputs(
     valid_dataloader,
@@ -1896,24 +1932,35 @@ def check_outputs(
         results[idx] = (rb, src_tokens, tgt_tokens, model_out, model_txt)
     return results
 
+
 example_data = None
+
+
 def run_model_example():
     global example_data, vocab_src, vocab_tgt
 
     _, valid_dataloader = create_dataloaders(
-    torch.device("cpu"), 
-    vocab_src, vocab_tgt,
-    spacy_de, spacy_en,
-    batch_size=1, is_distributed=False)
-    
+        torch.device("cpu"),
+        vocab_src,
+        vocab_tgt,
+        spacy_de,
+        spacy_en,
+        batch_size=1,
+        is_distributed=False,
+    )
+
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(torch.load('iwslt_sd_final.pt', map_location=torch.device("cpu")))
-    
+    model.load_state_dict(
+        torch.load("iwslt_sd_final.pt", map_location=torch.device("cpu"))
+    )
+
     example_data = check_outputs(
         valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
     )
 
+
 show_example(run_model_example)
+
 
 # %% [markdown] id="0ZkkNTKLTsqO"
 # ## Attention Visualization
@@ -2035,7 +2082,10 @@ def viz_encoder_self():
         & layer_viz[5]
     )
 
+
 show_example(viz_encoder_self)
+
+
 # %% [markdown]
 # ## Decoder Self Attention
 
@@ -2043,9 +2093,7 @@ show_example(viz_encoder_self)
 def viz_decoder_self():
     global example_data
 
-    example = example_data[
-        len(example_data) - 1
-    ] 
+    example = example_data[len(example_data) - 1]
 
     layer_viz = [
         visualize_layer(
@@ -2066,7 +2114,10 @@ def viz_decoder_self():
         & layer_viz[4]
         & layer_viz[5]
     )
+
+
 show_example(viz_decoder_self)
+
 
 # %% [markdown]
 # ## Decoder Src Attention
@@ -2075,9 +2126,7 @@ show_example(viz_decoder_self)
 def viz_decoder_src():
     global example_data
 
-    example = example_data[
-        len(example_data) - 1
-    ] 
+    example = example_data[len(example_data) - 1]
 
     layer_viz = [
         visualize_layer(
@@ -2098,6 +2147,8 @@ def viz_decoder_src():
         & layer_viz[4]
         & layer_viz[5]
     )
+
+
 show_example(viz_decoder_src)
 
 # %% [markdown] id="nSseuCcATsqO"
