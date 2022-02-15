@@ -1587,7 +1587,7 @@ def create_dataloaders(
 # %% id="Kx53VVTgTsqM" tags=[]
 # #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 # %%
-def train_model(
+def train_worker(
     gpu,
     ngpus_per_node,
     vocab_src,
@@ -1602,27 +1602,37 @@ def train_model(
     warmup=2000,
     file_prefix="iwslt",
 ):
+    # for debugging
     wandb.init(project="at2021", entity="subramen", group="DDP")
+
     print(f"Using GPU: {gpu} for training")
-    dist.init_process_group(
-        "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
-    )
     torch.cuda.set_device(gpu)
     is_main_process = gpu == 0
 
     pad_idx = vocab_tgt["<blank>"]
-    model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model_init.cuda(gpu)
-    model = DDP(model_init, device_ids=[gpu])
+    d_model = 512
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.cuda(gpu)
+    module = model
+
+    if ngpus_per_node > 1:
+        dist.init_process_group(
+            "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
+        )
+        model = DDP(model, device_ids=[gpu])
+        module = model.module
+
+
+    # for debugging
     if is_main_process:
         wandb.watch(model)
-    d_model = 512
+
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda(gpu)
+
     train_dataloader, valid_dataloader = create_dataloaders(
-        # batch_size=batch_size
         gpu,
         vocab_src, vocab_tgt,
         spacy_de, spacy_en,
@@ -1638,6 +1648,7 @@ def train_model(
         lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
     )
     train_state = TrainState()
+
     for epoch in range(num_epochs):
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
@@ -1646,11 +1657,11 @@ def train_model(
             wandb.log({"epoch": epoch})
 
         model.train()
-        print("Epoch " + str(epoch) + " Training ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Training ====")
         _, train_state = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
             model,
-            SimpleLossCompute(model.module.generator, criterion),
+            SimpleLossCompute(module.generator, criterion),
             optimizer,
             lr_scheduler,
             mode="train+log",
@@ -1661,16 +1672,16 @@ def train_model(
         GPUtil.showUtilization()
         if is_main_process:
             file_path = "%s%.2d.pt" % (file_prefix, epoch)
-            torch.save(model, file_path)
+            torch.save(module.state_dict(), file_path)
             # wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
-        print("Epoch " + str(epoch) + " Validation ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Validation ====")
         model.eval()
         sloss = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
             model,
-            SimpleLossCompute(model.module.generator, criterion),
+            SimpleLossCompute(module.generator, criterion),
             NoopOptimizer(),
             NoopScheduler(),
             mode="eval",
@@ -1680,12 +1691,7 @@ def train_model(
 
     if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
-        torch.save(model, file_path)
-        # wandb.log_artifact(file_path, name="final_model", type="model")
-
-    if is_main_process:
-        file_path = "%sfinal.pt" % file_prefix
-        torch.save(model, file_path)
+        torch.save(module.state_dict(), file_path)
         # wandb.log_artifact(file_path, name="final_model", type="model")
 
     wandb.finish()
@@ -1698,43 +1704,47 @@ def train_model(
 # %% tags=[]
 create_model = True
 
+def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
+    from the_annotated_transformer import train_worker
 
-def train_ddp(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args, ngpus=None):
-    from the_annotated_transformer import (
-        train_model,
-    )  # necessary for running in ipynb
-
-    # single node multi-gpu training
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    if ngpus is None:
-        ngpus = torch.cuda.device_count()
-    mp.spawn(
-        train_model,
-        nprocs=ngpus,
-        args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, *train_args.values()),
-    )
+    ngpus = torch.cuda.device_count()
+    if ngpus > 1:  # use DDP
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
+        mp.spawn(
+            train_worker,
+            nprocs=ngpus,
+            args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, *train_args.values()),
+        )
+    else:  # single GPU
+        train_worker(0, ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, *train_args.values())
 
 
-config = {
-    "batch_size": 320,
-    "num_epochs": 50,
-    # "accum_iter": 4,
-    "accum_iter": 5,
-    "base_lr": 1.0,
-    "max_padding": 72,
-    "warmup": 3000,
-    "file_prefix": "iwslt_",
-}
+def load_trained_model(create_model=True):
+    config = {
+        "batch_size": 320,
+        "num_epochs": 50,
+        "accum_iter": 5,
+        "base_lr": 1.0,
+        "max_padding": 72,
+        "warmup": 3000,
+        "file_prefix": "iwslt_sd_",
+    }
+
+    wandb.config = config  # for debugging
+    
+    if create_model:
+        train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
+
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.load_state_dict(torch.load('iwslt_sd_final.pt'))
+    return model
+
 
 if __name__ == "__main__":
-    # for debugging - remove later
-    wandb.config = config
-    if create_model:
-        # effective batch size = accum_iter x batch_size
-        train_ddp(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
-    else:
-        model = torch.load("iwslt_final.pt")
+    model = load_trained_model(create_model=True)
+
+
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
@@ -1888,7 +1898,7 @@ def check_outputs(
 
 example_data = None
 def run_model_example():
-    global example_data
+    global example_data, vocab_src, vocab_tgt
 
     _, valid_dataloader = create_dataloaders(
     torch.device("cpu"), 
@@ -1896,10 +1906,9 @@ def run_model_example():
     spacy_de, spacy_en,
     batch_size=1, is_distributed=False)
     
-    model = torch.load(
-        "iwslt_final.pt", map_location=torch.device("cpu")
-    ).module
-
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.load_state_dict(torch.load('iwslt_sd_final.pt', map_location=torch.device("cpu")))
+    
     example_data = check_outputs(
         valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
     )
