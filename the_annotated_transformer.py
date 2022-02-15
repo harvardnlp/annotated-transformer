@@ -88,11 +88,9 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 # temporary for debugging - remove before final version
 import wandb
 
-IS_NOTEBOOK = False
-
 
 def show_example(fn, args=[]):
-    if IS_NOTEBOOK:
+    if __name__ == "__main__":
         return fn(*args)
 
 
@@ -1388,28 +1386,27 @@ def example_simple_model():
 # Load spacy tokenizer models, download them if they haven't been
 # downloaded already
 
-try:
-    spacy_de = spacy.load("de_core_news_sm")
-except IOError:
-    os.system("python -m spacy download de_core_news_sm")
-    spacy_de = spacy.load("de_core_news_sm")
+spacy_de = None
+spacy_en = None
+def load_tokenizers():
+    global spacy_de, spacy_en
+
+    try:
+        spacy_de = spacy.load("de_core_news_sm")
+    except IOError:
+        os.system("python -m spacy download de_core_news_sm")
+        spacy_de = spacy.load("de_core_news_sm")
 
 
-try:
-    spacy_en = spacy.load("en_core_web_sm")
-except IOError:
-    os.system("python -m spacy download en_core_web_sm")
-    spacy_en = spacy.load("en_core_web_sm")
+    try:
+        spacy_en = spacy.load("en_core_web_sm")
+    except IOError:
+        os.system("python -m spacy download en_core_web_sm")
+        spacy_en = spacy.load("en_core_web_sm")
 
 
 # %% id="t4BszXXJTsqL" tags=[]
-def tokenize_de(text):
-    return [tok.text for tok in spacy_de.tokenizer(text)]
-
-
-def tokenize_en(text):
-    return [tok.text for tok in spacy_en.tokenizer(text)]
-
+tokenize = lambda text, tokenizer: [tok.text for tok in tokenizer.tokenizer(text)] 
 
 def yield_tokens(data_iter, tokenizer, index):
     for from_to_tuple in data_iter:
@@ -1423,6 +1420,7 @@ def build_vocabulary():
 
     print("Building German Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+    tokenize_de = lambda text: tokenize(text, spacy_de)
     vocab_src = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_de, index=0),
         min_freq=2,
@@ -1431,6 +1429,7 @@ def build_vocabulary():
 
     print("Building English Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+    tokenize_en = lambda text: tokenize(text, spacy_en)
     vocab_tgt = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_en, index=1),
         min_freq=2,
@@ -1442,18 +1441,22 @@ def build_vocabulary():
 
     return vocab_src, vocab_tgt
 
+vocab_src = None
+vocab_tgt = None
+def load_vocab():
+    global vocab_src, vocab_tgt
 
-if not exists("vocab.pt"):
-    vocab_src, vocab_tgt = build_vocabulary()
-    torch.save((vocab_src, vocab_tgt), "vocab.pt")
-else:
-    vocab_src, vocab_tgt = torch.load("vocab.pt")
-
-if IS_NOTEBOOK:
+    if not exists("vocab.pt"):
+        vocab_src, vocab_tgt = build_vocabulary()
+        torch.save((vocab_src, vocab_tgt), "vocab.pt")
+    else:
+        vocab_src, vocab_tgt = torch.load("vocab.pt")
     print("Finished.\nVocabulary sizes:")
     print(len(vocab_src))
     print(len(vocab_tgt))
 
+show_example(load_tokenizers)
+show_example(load_vocab)
 
 # %% [markdown] id="-l-TFwzfTsqL"
 #
@@ -1532,9 +1535,12 @@ def collate_batch(
 
 # %% id="ka2Ce_WIokC_" tags=[]
 def create_dataloaders(
-    device, batch_size=12000, max_padding=128, is_distributed=True
+    device, vocab_src, vocab_tgt, spacy_de, spacy_en, batch_size=12000, max_padding=128, is_distributed=True
 ):
     # def create_dataloaders(batch_size=12000):
+    tokenize_de = lambda text: tokenize(text, spacy_de)
+    tokenize_en = lambda text: tokenize(text, spacy_en)
+
     def collate_fn(batch):
         return collate_batch(
             batch,
@@ -1569,8 +1575,6 @@ def create_dataloaders(
     )
     return train_dataloader, valid_dataloader
 
-
-# %% [markdown] id="n-aVUlpjTsqM"
 #
 # > Now we train the model. I will play with the warmup steps a bit,
 # > but everything else uses the default parameters.  On an AWS
@@ -1588,6 +1592,8 @@ def train_model(
     ngpus_per_node,
     vocab_src,
     vocab_tgt,
+    spacy_de,
+    spacy_en,
     batch_size=64,
     num_epochs=10,
     accum_iter=12000 / 64,
@@ -1618,6 +1624,8 @@ def train_model(
     train_dataloader, valid_dataloader = create_dataloaders(
         # batch_size=batch_size
         gpu,
+        vocab_src, vocab_tgt,
+        spacy_de, spacy_en,
         batch_size=batch_size // ngpus_per_node,
         max_padding=max_padding,
     )
@@ -1691,7 +1699,7 @@ def train_model(
 create_model = True
 
 
-def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
+def train_ddp(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args, ngpus=None):
     from the_annotated_transformer import (
         train_model,
     )  # necessary for running in ipynb
@@ -1704,7 +1712,7 @@ def train_ddp(vocab_src, vocab_tgt, train_args, ngpus=None):
     mp.spawn(
         train_model,
         nprocs=ngpus,
-        args=(ngpus, vocab_src, vocab_tgt, *train_args.values()),
+        args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, *train_args.values()),
     )
 
 
@@ -1719,12 +1727,12 @@ config = {
     "file_prefix": "iwslt_",
 }
 
-if __name__ == "__main__" and IS_NOTEBOOK:
+if __name__ == "__main__":
     # for debugging - remove later
     wandb.config = config
     if create_model:
         # effective batch size = accum_iter x batch_size
-        train_ddp(vocab_src, vocab_tgt, config)
+        train_ddp(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
     else:
         model = torch.load("iwslt_final.pt")
 
@@ -1831,13 +1839,8 @@ def average(model, models):
 
 # %%
 # Load data and model for output checks
-_, valid_dataloader = create_dataloaders(
-    torch.device("cpu"), batch_size=1, is_distributed=False
-)
-if IS_NOTEBOOK:
-    model = torch.load(
-        "iwslt_final.pt", map_location=torch.device("cpu")
-    ).module
+
+
 
 
 # %%
@@ -1883,12 +1886,25 @@ def check_outputs(
         results[idx] = (rb, src_tokens, tgt_tokens, model_out, model_txt)
     return results
 
+example_data = None
+def run_model_example():
+    global example_data
 
-if IS_NOTEBOOK:
+    _, valid_dataloader = create_dataloaders(
+    torch.device("cpu"), 
+    vocab_src, vocab_tgt,
+    spacy_de, spacy_en,
+    batch_size=1, is_distributed=False)
+    
+    model = torch.load(
+        "iwslt_final.pt", map_location=torch.device("cpu")
+    ).module
+
     example_data = check_outputs(
         valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
     )
 
+show_example(run_model_example)
 
 # %% [markdown] id="0ZkkNTKLTsqO"
 # ## Attention Visualization
@@ -1988,7 +2004,9 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
 # ## Encoder Self Attention
 
 # %% tags=[]
-if IS_NOTEBOOK:
+def viz_encoder_self():
+    global example_data
+
     example = example_data[
         len(example_data) - 1
     ]  # batch object for the final example
@@ -2008,11 +2026,18 @@ if IS_NOTEBOOK:
         & layer_viz[5]
     )
 
+show_example(viz_encoder_self)
 # %% [markdown]
 # ## Decoder Self Attention
 
 # %% tags=[]
-if IS_NOTEBOOK:
+def viz_decoder_self():
+    global example_data
+
+    example = example_data[
+        len(example_data) - 1
+    ] 
+
     layer_viz = [
         visualize_layer(
             model,
@@ -2032,12 +2057,19 @@ if IS_NOTEBOOK:
         & layer_viz[4]
         & layer_viz[5]
     )
+show_example(viz_decoder_self)
 
 # %% [markdown]
 # ## Decoder Src Attention
 
 # %% tags=[]
-if IS_NOTEBOOK:
+def viz_decoder_src():
+    global example_data
+
+    example = example_data[
+        len(example_data) - 1
+    ] 
+
     layer_viz = [
         visualize_layer(
             model,
@@ -2057,6 +2089,7 @@ if IS_NOTEBOOK:
         & layer_viz[4]
         & layer_viz[5]
     )
+show_example(viz_decoder_src)
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
