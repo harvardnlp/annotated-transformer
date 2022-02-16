@@ -1,24 +1,24 @@
-notebook: The\ Annotated\ Transformer.py
-	jupytext --to ipynb The\ Annotated\ Transformer.py
+notebook: the_annotated_transformer.py
+	jupytext --to ipynb the_annotated_transformer.py
 
-py: The\ Annotated\ Transformer.ipynb
-	jupytext --to py:percent The\ Annotated\ Transformer.ipynb
+py: the_annotated_transformer.ipynb
+	jupytext --to py:percent the_annotated_transformer.ipynb
 
-The\ Annotated\ Transformer.ipynb: The\ Annotated\ Transformer.py
-	jupytext --to ipynb The\ Annotated\ Transformer.py
+the_annotated_transformer.ipynb: the_annotated_transformer.py
+	jupytext --to ipynb the_annotated_transformer.py
 
-execute: The\ Annotated\ Transformer.py
-	jupytext --execute --to ipynb The\ Annotated\ Transformer.py
+execute: the_annotated_transformer.py
+	jupytext --execute --to ipynb the_annotated_transformer.py
 
-html: The\ Annotated\ Transformer.ipynb
-	jupytext --to ipynb The\ Annotated\ Transformer.py
-	jupyter nbconvert --to html The\ Annotated\ Transformer.ipynb
+html: the_annotated_transformer.ipynb
+	jupytext --to ipynb the_annotated_transformer.py
+	jupyter nbconvert --to html the_annotated_transformer.ipynb
 
-flake: The\ Annotated\ Transformer.ipynb
-	flake8 --show-source The\ Annotated\ Transformer.py
+flake: the_annotated_transformer.ipynb
+	flake8 --show-source the_annotated_transformer.py
 
-black: The\ Annotated\ Transformer.ipynb
-	black --line-length 79 The\ Annotated\ Transformer.py
+black: the_annotated_transformer.ipynb
+	black --line-length 79 the_annotated_transformer.py
 
 clean: 
-	rm -f The\ Annotated\ Transformer.ipynb
+	rm -f the_annotated_transformer.ipynb

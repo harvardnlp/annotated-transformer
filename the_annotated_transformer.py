@@ -62,8 +62,8 @@
 # # !pip install -r requirements.txt
 
 # %% id="v1-1MX6oTsp9"
-from os.path import exists
 import os
+from os.path import exists
 import torch
 import torch.nn as nn
 from torch.nn.functional import log_softmax, pad
@@ -80,12 +80,18 @@ import torchtext.datasets as datasets
 import spacy
 import GPUtil
 
+from torch.utils.data.distributed import DistributedSampler
+import torch.distributed as dist
+import torch.multiprocessing as mp
+from torch.nn.parallel import DistributedDataParallel as DDP
+
 # temporary for debugging - remove before final version
 import wandb
 
 
 def show_example(fn, args=[]):
-    return fn(*args)
+    if __name__ == "__main__":
+        return fn(*args)
 
 
 def train_example(fn, args=[]):
@@ -1380,27 +1386,29 @@ def example_simple_model():
 # Load spacy tokenizer models, download them if they haven't been
 # downloaded already
 
-try:
-    spacy_de = spacy.load("de_core_news_sm")
-except IOError:
-    os.system("python -m spacy download de_core_news_sm")
-    spacy_de = spacy.load("de_core_news_sm")
+spacy_de = None
+spacy_en = None
 
 
-try:
-    spacy_en = spacy.load("en_core_web_sm")
-except IOError:
-    os.system("python -m spacy download en_core_web_sm")
-    spacy_en = spacy.load("en_core_web_sm")
+def load_tokenizers():
+    global spacy_de, spacy_en
+
+    try:
+        spacy_de = spacy.load("de_core_news_sm")
+    except IOError:
+        os.system("python -m spacy download de_core_news_sm")
+        spacy_de = spacy.load("de_core_news_sm")
+
+    try:
+        spacy_en = spacy.load("en_core_web_sm")
+    except IOError:
+        os.system("python -m spacy download en_core_web_sm")
+        spacy_en = spacy.load("en_core_web_sm")
 
 
 # %% id="t4BszXXJTsqL" tags=[]
-def tokenize_de(text):
-    return [tok.text for tok in spacy_de.tokenizer(text)]
-
-
-def tokenize_en(text):
-    return [tok.text for tok in spacy_en.tokenizer(text)]
+def tokenize(text, tokenizer):
+    return [tok.text for tok in tokenizer.tokenizer(text)]
 
 
 def yield_tokens(data_iter, tokenizer, index):
@@ -1412,6 +1420,11 @@ def yield_tokens(data_iter, tokenizer, index):
 
 
 def build_vocabulary():
+    def tokenize_de(text):
+        return tokenize(text, spacy_de)
+
+    def tokenize_en(text):
+        return tokenize(text, spacy_en)
 
     print("Building German Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
@@ -1435,15 +1448,25 @@ def build_vocabulary():
     return vocab_src, vocab_tgt
 
 
-if not exists("vocab.pt"):
-    vocab_src, vocab_tgt = build_vocabulary()
-    torch.save((vocab_src, vocab_tgt), "vocab.pt")
-else:
-    vocab_src, vocab_tgt = torch.load("vocab.pt")
+vocab_src = None
+vocab_tgt = None
 
-print("Finished.\nVocabulary sizes:")
-print(len(vocab_src))
-print(len(vocab_tgt))
+
+def load_vocab():
+    global vocab_src, vocab_tgt
+
+    if not exists("vocab.pt"):
+        vocab_src, vocab_tgt = build_vocabulary()
+        torch.save((vocab_src, vocab_tgt), "vocab.pt")
+    else:
+        vocab_src, vocab_tgt = torch.load("vocab.pt")
+    print("Finished.\nVocabulary sizes:")
+    print(len(vocab_src))
+    print(len(vocab_tgt))
+
+
+show_example(load_tokenizers)
+show_example(load_vocab)
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1522,8 +1545,23 @@ def collate_batch(
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
-def create_dataloaders(device, batch_size=12000, max_padding=128):
+def create_dataloaders(
+    device,
+    vocab_src,
+    vocab_tgt,
+    spacy_de,
+    spacy_en,
+    batch_size=12000,
+    max_padding=128,
+    is_distributed=True,
+):
     # def create_dataloaders(batch_size=12000):
+    def tokenize_de(text):
+        return tokenize(text, spacy_de)
+
+    def tokenize_en(text):
+        return tokenize(text, spacy_en)
+
     def collate_fn(batch):
         return collate_batch(
             batch,
@@ -1539,22 +1577,26 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
         language_pair=("de", "en")
     )
+    train_sampler = DistributedSampler(train_iter) if is_distributed else None
+    valid_sampler = DistributedSampler(valid_iter) if is_distributed else None
+
     train_dataloader = DataLoader(
         to_map_style_dataset(train_iter),
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=(train_sampler is None),
+        sampler=train_sampler,
         collate_fn=collate_fn,
     )
     valid_dataloader = DataLoader(
         to_map_style_dataset(valid_iter),
         batch_size=batch_size,
-        shuffle=True,
+        shuffle=(valid_sampler is None),
+        sampler=valid_sampler,
         collate_fn=collate_fn,
     )
     return train_dataloader, valid_dataloader
 
 
-# %% [markdown] id="n-aVUlpjTsqM"
 #
 # > Now we train the model. I will play with the warmup steps a bit,
 # > but everything else uses the default parameters.  On an AWS
@@ -1566,12 +1608,14 @@ def create_dataloaders(device, batch_size=12000, max_padding=128):
 
 # %% id="Kx53VVTgTsqM" tags=[]
 # #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
-
 # %%
-def train_model(
+def train_worker(
+    gpu,
+    ngpus_per_node,
     vocab_src,
     vocab_tgt,
-    devices,
+    spacy_de,
+    spacy_en,
     batch_size=64,
     num_epochs=10,
     accum_iter=12000 / 64,
@@ -1580,20 +1624,42 @@ def train_model(
     warmup=2000,
     file_prefix="iwslt",
 ):
+    # for debugging
+    wandb.init(project="at2021", entity="subramen", group="DDP")
+
+    print(f"Using GPU: {gpu} for training")
+    torch.cuda.set_device(gpu)
+    is_main_process = gpu == 0
+
     pad_idx = vocab_tgt["<blank>"]
-    model_init = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model = nn.DataParallel(model_init, device_ids=devices)
-    wandb.watch(model.module)
     d_model = 512
-    model_init.cuda()
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.cuda(gpu)
+    module = model
+
+    if ngpus_per_node > 1:
+        dist.init_process_group(
+            "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
+        )
+        model = DDP(model, device_ids=[gpu])
+        module = model.module
+
+    # for debugging
+    if is_main_process:
+        wandb.watch(model)
+
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
-    criterion.cuda()
+    criterion.cuda(gpu)
+
     train_dataloader, valid_dataloader = create_dataloaders(
-        # batch_size=batch_size
-        devices[0],
-        batch_size=batch_size,
+        gpu,
+        vocab_src,
+        vocab_tgt,
+        spacy_de,
+        spacy_en,
+        batch_size=batch_size // ngpus_per_node,
         max_padding=max_padding,
     )
 
@@ -1605,14 +1671,20 @@ def train_model(
         lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
     )
     train_state = TrainState()
+
     for epoch in range(num_epochs):
-        wandb.log({"epoch": epoch})
+        train_dataloader.sampler.set_epoch(epoch)
+        valid_dataloader.sampler.set_epoch(epoch)
+
+        if is_main_process:
+            wandb.log({"epoch": epoch})
+
         model.train()
-        print("Epoch " + str(epoch) + " Training ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Training ====")
         _, train_state = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
             model,
-            SimpleLossCompute(model.module.generator, criterion),
+            SimpleLossCompute(module.generator, criterion),
             optimizer,
             lr_scheduler,
             mode="train+log",
@@ -1621,27 +1693,31 @@ def train_model(
         )
 
         GPUtil.showUtilization()
-        file_path = "%s%.2d.pt" % (file_prefix, epoch)
-        torch.save(model, file_path)
-        wandb.log_artifact(file_path, name=file_path, type="model")
+        if is_main_process:
+            file_path = "%s%.2d.pt" % (file_prefix, epoch)
+            torch.save(module.state_dict(), file_path)
+            # wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
-        print("Epoch " + str(epoch) + " Validation ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Validation ====")
         model.eval()
         sloss = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
             model,
-            SimpleLossCompute(model.module.generator, criterion),
+            SimpleLossCompute(module.generator, criterion),
             NoopOptimizer(),
             NoopScheduler(),
             mode="eval",
         )
         print(sloss)
         torch.cuda.empty_cache()
-    file_path = "%sfinal.pt" % file_prefix
-    torch.save(model, file_path)
-    wandb.log_artifact(file_path, name="final_model", type="model")
-    return model
+
+    if is_main_process:
+        file_path = "%sfinal.pt" % file_prefix
+        torch.save(module.state_dict(), file_path)
+        # wandb.log_artifact(file_path, name="final_model", type="model")
+
+    wandb.finish()
 
 
 # %%
@@ -1650,28 +1726,63 @@ def train_model(
 
 # %% tags=[]
 create_model = True
-devices = range(torch.cuda.device_count())
 
-config = {
-    "batch_size": 96,
-    "num_epochs": 50,
-    # "accum_iter": 4,
-    "accum_iter": 5,
-    "base_lr": 1.0,
-    "max_padding": 72,
-    "warmup": 3000,
-    "file_prefix": "iwslt_",
-}
 
-# for debugging - remove later
-wandb.config = config
-wandb.init(project="at2021", entity="avh", config=config)
+def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
+    from the_annotated_transformer import train_worker
 
-if create_model:
-    # effective batch size = accum_iter x batch_size
-    model = train_model(vocab_src, vocab_tgt, devices, **config)
-else:
-    model = torch.load("iwslt_final.pt")
+    ngpus = torch.cuda.device_count()
+    if ngpus > 1:  # use DDP
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12355"
+        mp.spawn(
+            train_worker,
+            nprocs=ngpus,
+            args=(
+                ngpus,
+                vocab_src,
+                vocab_tgt,
+                spacy_de,
+                spacy_en,
+                *train_args.values(),
+            ),
+        )
+    else:  # single GPU
+        train_worker(
+            0,
+            ngpus,
+            vocab_src,
+            vocab_tgt,
+            spacy_de,
+            spacy_en,
+            *train_args.values(),
+        )
+
+
+def load_trained_model(create_model=True):
+    config = {
+        "batch_size": 320,
+        "num_epochs": 50,
+        "accum_iter": 5,
+        "base_lr": 1.0,
+        "max_padding": 72,
+        "warmup": 3000,
+        "file_prefix": "iwslt_sd_",
+    }
+
+    wandb.config = config  # for debugging
+
+    if create_model:
+        train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
+
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.load_state_dict(torch.load("iwslt_sd_final.pt"))
+    return model
+
+
+if __name__ == "__main__":
+    model = load_trained_model(create_model=True)
+
 
 # %% [markdown] id="RZK_VjDPTsqN"
 #
@@ -1776,12 +1887,6 @@ def average(model, models):
 
 # %%
 # Load data and model for output checks
-_, valid_dataloader = create_dataloaders(
-    torch.device("cpu"),
-    batch_size=1,
-)
-
-model = torch.load("iwslt_final.pt", map_location=torch.device("cpu")).module
 
 
 # %%
@@ -1828,9 +1933,33 @@ def check_outputs(
     return results
 
 
-example_data = check_outputs(
-    valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
-)
+example_data = None
+
+
+def run_model_example():
+    global example_data, vocab_src, vocab_tgt
+
+    _, valid_dataloader = create_dataloaders(
+        torch.device("cpu"),
+        vocab_src,
+        vocab_tgt,
+        spacy_de,
+        spacy_en,
+        batch_size=1,
+        is_distributed=False,
+    )
+
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.load_state_dict(
+        torch.load("iwslt_sd_final.pt", map_location=torch.device("cpu"))
+    )
+
+    example_data = check_outputs(
+        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
+    )
+
+
+show_example(run_model_example)
 
 
 # %% [markdown] id="0ZkkNTKLTsqO"
@@ -1931,68 +2060,96 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
 # ## Encoder Self Attention
 
 # %% tags=[]
-example = example_data[
-    len(example_data) - 1
-]  # batch object for the final example
+def viz_encoder_self():
+    global example_data
 
+    example = example_data[
+        len(example_data) - 1
+    ]  # batch object for the final example
 
-layer_viz = [
-    visualize_layer(
-        model, layer, get_encoder, len(example[1]), example[1], example[1]
+    layer_viz = [
+        visualize_layer(
+            model, layer, get_encoder, len(example[1]), example[1], example[1]
+        )
+        for layer in range(6)
+    ]
+    alt.hconcat(
+        layer_viz[0]
+        & layer_viz[1]
+        & layer_viz[2]
+        & layer_viz[3]
+        & layer_viz[4]
+        & layer_viz[5]
     )
-    for layer in range(6)
-]
-alt.hconcat(
-    layer_viz[0]
-    & layer_viz[1]
-    & layer_viz[2]
-    & layer_viz[3]
-    & layer_viz[4]
-    & layer_viz[5]
-)
+
+
+show_example(viz_encoder_self)
+
 
 # %% [markdown]
 # ## Decoder Self Attention
 
 # %% tags=[]
-layer_viz = [
-    visualize_layer(
-        model, layer, get_decoder_self, len(example[1]), example[1], example[1]
+def viz_decoder_self():
+    global example_data
+
+    example = example_data[len(example_data) - 1]
+
+    layer_viz = [
+        visualize_layer(
+            model,
+            layer,
+            get_decoder_self,
+            len(example[1]),
+            example[1],
+            example[1],
+        )
+        for layer in range(6)
+    ]
+    alt.hconcat(
+        layer_viz[0]
+        & layer_viz[1]
+        & layer_viz[2]
+        & layer_viz[3]
+        & layer_viz[4]
+        & layer_viz[5]
     )
-    for layer in range(6)
-]
-alt.hconcat(
-    layer_viz[0]
-    & layer_viz[1]
-    & layer_viz[2]
-    & layer_viz[3]
-    & layer_viz[4]
-    & layer_viz[5]
-)
+
+
+show_example(viz_decoder_self)
+
 
 # %% [markdown]
 # ## Decoder Src Attention
 
 # %% tags=[]
-layer_viz = [
-    visualize_layer(
-        model,
-        layer,
-        get_decoder_src,
-        max(len(example[1]), len(example[2])),
-        example[1],
-        example[2],
+def viz_decoder_src():
+    global example_data
+
+    example = example_data[len(example_data) - 1]
+
+    layer_viz = [
+        visualize_layer(
+            model,
+            layer,
+            get_decoder_src,
+            max(len(example[1]), len(example[2])),
+            example[1],
+            example[2],
+        )
+        for layer in range(6)
+    ]
+    alt.hconcat(
+        layer_viz[0]
+        & layer_viz[1]
+        & layer_viz[2]
+        & layer_viz[3]
+        & layer_viz[4]
+        & layer_viz[5]
     )
-    for layer in range(6)
-]
-alt.hconcat(
-    layer_viz[0]
-    & layer_viz[1]
-    & layer_viz[2]
-    & layer_viz[3]
-    & layer_viz[4]
-    & layer_viz[5]
-)
+
+
+show_example(viz_decoder_src)
 
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
