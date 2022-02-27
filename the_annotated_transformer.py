@@ -86,7 +86,7 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # temporary for debugging - remove before final version
-import wandb
+# import wandb
 
 
 def show_example(fn, args=[]):
@@ -95,7 +95,8 @@ def show_example(fn, args=[]):
 
 
 def train_example(fn, args=[]):
-    fn(*args)
+    if __name__ == "__main__":
+        fn(*args)
 
 
 class NoopOptimizer(torch.optim.Optimizer):
@@ -941,27 +942,27 @@ def run_epoch(
         if i % 10 == 1 and mode == "train+log":
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
-            wandb.log(
-                {
-                    "step": i,
-                    "accum_step": n_accum,
-                    "loss": loss / batch.ntokens,
-                    "tokens_per_sec": tokens / elapsed,
-                    "lr": lr,
-                    "samples": i * batch.src.shape[0],
-                    "total_microbatch_step": train_state.step,
-                    "total_accum_step": train_state.accum_step,
-                    "total_samples": train_state.samples,
-                    "total_tokens": train_state.tokens,
-                }
-            )
+#             wandb.log(
+#                 {
+#                     "step": i,
+#                     "accum_step": n_accum,
+#                     "loss": loss / batch.ntokens,
+#                     "tokens_per_sec": tokens / elapsed,
+#                     "lr": lr,
+#                     "samples": i * batch.src.shape[0],
+#                     "total_microbatch_step": train_state.step,
+#                     "total_accum_step": train_state.accum_step,
+#                     "total_samples": train_state.samples,
+#                     "total_tokens": train_state.tokens,
+#                 }
+#             )
         if i % 20 == 1 and (mode == "train" or mode == "train+log"):
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
                 (
                     "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f "
-                    + "| Tokens per Sec: %7.1f | Learning Rate: %10.1e"
+                    + "| Tokens / Sec: %7.1f | Learning Rate: %6.1e"
                 )
                 % (i, n_accum, loss / batch.ntokens, tokens / elapsed, lr)
             )
@@ -1123,7 +1124,7 @@ def example_learning_schedule():
     )
 
 
-# example_learning_schedule()
+example_learning_schedule()
 
 
 # %% [markdown] id="7T1uD15VTsqK"
@@ -1218,7 +1219,8 @@ def example_label_smoothing():
     )
 
 
-# show_example(example_label_smoothing)
+show_example(example_label_smoothing)
+
 
 # %% [markdown] id="CGM8J1veTsqK"
 #
@@ -1226,18 +1228,17 @@ def example_label_smoothing():
 # > very confident about a given choice.
 
 # %% id="78EHzLP7TsqK"
-crit = LabelSmoothing(5, 0, 0.1)
 
-
-def loss(x):
+def loss(x, crit):
     d = x + 3 * 1
     predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d]])
     return crit(predict.log(), torch.LongTensor([1])).data
 
 
-def example_label_smoothing2():
+def penalization_visualization():
+    crit = LabelSmoothing(5, 0, 0.1)    
     loss_data = pd.DataFrame(
-        {"Loss": [loss(x) for x in range(1, 100)], "Steps": list(range(99))}
+        {"Loss": [loss(x, crit) for x in range(1, 100)], "Steps": list(range(99))}
     ).astype("float")
 
     return (
@@ -1251,7 +1252,8 @@ def example_label_smoothing2():
     )
 
 
-# show_example(example_label_smoothing2)
+show_example(penalization_visualization)
+
 
 # %% [markdown] id="67lUqeLXTsqK"
 # # A First  Example
@@ -1348,16 +1350,15 @@ def example_simple_model():
             mode="train",
         )
         model.eval()
-        print(
-            run_epoch(
-                data_gen(V, 30, 5),
-                model,
-                SimpleLossCompute(model.generator, criterion),
-                NoopOptimizer(),
-                NoopScheduler(),
-                mode="eval",
-            )[0]
-        )
+        run_epoch(
+            data_gen(V, 30, 5),
+            model,
+            SimpleLossCompute(model.generator, criterion),
+            NoopOptimizer(),
+            NoopScheduler(),
+            mode="eval",
+        )[0]
+
 
     model.eval()
     src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
@@ -1416,6 +1417,12 @@ def yield_tokens(data_iter, tokenizer, index):
         yield tokenizer(from_to_tuple[index])
 
 
+ # %%
+ train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+
+# %%
+3
+
 # %% id="jU3kVlV5okC-" tags=[]
 
 
@@ -1448,10 +1455,6 @@ def build_vocabulary():
     return vocab_src, vocab_tgt
 
 
-vocab_src = None
-vocab_tgt = None
-
-
 def load_vocab():
     global vocab_src, vocab_tgt
 
@@ -1464,7 +1467,10 @@ def load_vocab():
     print(len(vocab_src))
     print(len(vocab_tgt))
 
+vocab_src = None
+vocab_tgt = None
 
+    
 show_example(load_tokenizers)
 show_example(load_vocab)
 
@@ -1540,8 +1546,7 @@ def collate_batch(
 
     src = torch.stack(src_list)
     tgt = torch.stack(tgt_list)
-    return (src, tgt)
-    # return src.to(device), tgt.to(device)
+    return (src, tgt)    
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
@@ -1625,7 +1630,8 @@ def train_worker(
     file_prefix="iwslt",
 ):
     # for debugging
-    wandb.init(project="at2021", entity="subramen", group="DDP")
+    # wandb.init(project="at2021", entity="subramen", group="DDP")
+    # wandb.init(project="at2021", entity="avh", mode="disabled")
 
     print(f"Using GPU: {gpu} for training")
     torch.cuda.set_device(gpu)
@@ -1645,8 +1651,8 @@ def train_worker(
         module = model.module
 
     # for debugging
-    if is_main_process:
-        wandb.watch(model)
+    # if is_main_process:
+        # wandb.watch(model)
 
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
@@ -1676,8 +1682,8 @@ def train_worker(
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
 
-        if is_main_process:
-            wandb.log({"epoch": epoch})
+        # if is_main_process:
+            # wandb.log({"epoch": epoch})
 
         model.train()
         print(f"[GPU{gpu}] Epoch {epoch} Training ====")
@@ -1717,22 +1723,31 @@ def train_worker(
         torch.save(module.state_dict(), file_path)
         # wandb.log_artifact(file_path, name="final_model", type="model")
 
-    wandb.finish()
+    # wandb.finish()
 
 
 # %%
-# for debugging - TODO remove this before final publication
-# assert(False)
+torch.cuda.device_count()
+
+# %%
+# %pdb
+
+# %%
+# %pdb
+
+# %%
+train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=("de", "en"))
 
 # %% tags=[]
 create_model = True
 
 
 def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
-    from the_annotated_transformer import train_worker
+    from the_annotated_transformer import train_worker    
 
     ngpus = torch.cuda.device_count()
-    if ngpus > 1:  # use DDP
+    # if ngpus > 1:  # use DDP
+    if False:  # use DDP
         os.environ["MASTER_ADDR"] = "localhost"
         os.environ["MASTER_PORT"] = "12355"
         mp.spawn(
@@ -1750,7 +1765,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
     else:  # single GPU
         train_worker(
             0,
-            ngpus,
+            1,
             vocab_src,
             vocab_tgt,
             spacy_de,
@@ -1759,7 +1774,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
         )
 
 
-def load_trained_model(create_model=True):
+def load_trained_model(create_model):
     config = {
         "batch_size": 320,
         "num_epochs": 50,
@@ -1770,7 +1785,7 @@ def load_trained_model(create_model=True):
         "file_prefix": "iwslt_sd_",
     }
 
-    wandb.config = config  # for debugging
+    # wandb.config = config  # for debugging
 
     if create_model:
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
