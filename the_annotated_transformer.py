@@ -85,9 +85,6 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-# temporary for debugging - remove before final version
-# import wandb
-
 
 def show_example(fn, args=[]):
     if __name__ == "__main__":
@@ -1250,8 +1247,7 @@ def penalization_visualization():
     )
 
 
-show_example(penalization_visualization)
-
+# show_example(penalization_visualization)
 
 # %% [markdown] id="67lUqeLXTsqK"
 # # A First  Example
@@ -1628,9 +1624,6 @@ def train_worker(
     file_prefix="iwslt",
 ):
     print("train_worker called")
-    # for debugging
-    # wandb.init(project="at2021", entity="subramen", group="DDP")
-    # wandb.init(project="at2021", entity="avh", mode="disabled")
     print(f"Using GPU: {gpu} for training")
     torch.cuda.set_device(gpu)
     is_main_process = gpu == 0
@@ -1646,10 +1639,6 @@ def train_worker(
     )
     model = DDP(model, device_ids=[gpu])
     module = model.module
-
-    # for debugging
-    # if is_main_process:
-        # wandb.watch(model)
 
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
@@ -1684,9 +1673,6 @@ def train_worker(
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
 
-        # if is_main_process:
-            # wandb.log({"epoch": epoch})
-
         model.train()
         print(f"[GPU{gpu}] Epoch {epoch} Training ====")
         _, train_state = run_epoch(
@@ -1704,7 +1690,6 @@ def train_worker(
         if is_main_process:
             file_path = "%s%.2d.pt" % (file_prefix, epoch)
             torch.save(module.state_dict(), file_path)
-            # wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
         print(f"[GPU{gpu}] Epoch {epoch} Validation ====")
@@ -1726,39 +1711,6 @@ def train_worker(
     if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
         torch.save(module.state_dict(), file_path)
-        # wandb.log_artifact(file_path, name="final_model", type="model")
-
-    # wandb.finish()
-
-# %%
-# minimal example
-
-# %%
-world_size=1
-
-def spawn_test(gpu):
-    print(f"spawn_test called {gpu}")
-    dist.init_process_group(
-        "nccl", init_method="env://", rank=gpu, world_size=world_size
-    )    
-    train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=("de", "en"))
-    dset = to_map_style_dataset(train_iter)
-    print("Instantiating DistributedSampler")    
-    train_sampler = DistributedSampler(dset)
-    print("Done")
-
-
-# %%
-def runme():
-    from the_annotated_transformer import spawn_test
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    mp.spawn(spawn_test, nprocs=world_size)
-
-
-# %%
-if __name__ == "__main__":
-    runme()
 
 
 # %% tags=[]
@@ -1768,7 +1720,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12355"
     # set_trace()
-    print("train_model called")
+    print("Spawining training processes ...")
     mp.spawn(
         train_worker,
         nprocs=ngpus,
@@ -1785,7 +1737,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
 
 def load_trained_model(create_model):
     config = {
-        "batch_size": 180,
+        "batch_size": 160,
         # "num_epochs": 50,
         "num_epochs": 2,
         "accum_iter": 10,
@@ -1794,8 +1746,6 @@ def load_trained_model(create_model):
         "warmup": 3000,
         "file_prefix": "iwslt_sd_",
     }
-
-    # wandb.config = config  # for debugging
 
     if create_model:
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
