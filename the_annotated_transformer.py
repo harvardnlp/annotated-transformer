@@ -1124,8 +1124,7 @@ def example_learning_schedule():
     )
 
 
-example_learning_schedule()
-
+# example_learning_schedule()
 
 # %% [markdown] id="7T1uD15VTsqK"
 # ## Regularization
@@ -1219,8 +1218,7 @@ def example_label_smoothing():
     )
 
 
-show_example(example_label_smoothing)
-
+# show_example(example_label_smoothing)
 
 # %% [markdown] id="CGM8J1veTsqK"
 #
@@ -1417,11 +1415,8 @@ def yield_tokens(data_iter, tokenizer, index):
         yield tokenizer(from_to_tuple[index])
 
 
- # %%
- train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
-
 # %%
-3
+train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
 
 # %% id="jU3kVlV5okC-" tags=[]
 
@@ -1582,18 +1577,21 @@ def create_dataloaders(
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
         language_pair=("de", "en")
     )
-    train_sampler = DistributedSampler(train_iter) if is_distributed else None
-    valid_sampler = DistributedSampler(valid_iter) if is_distributed else None
+    
+    train_iter_map = to_map_style_dataset(train_iter) # DistributedSampler needs a dataset len()
+    train_sampler = DistributedSampler(train_iter_map) if is_distributed else None
+    valid_iter_map = to_map_style_dataset(valid_iter)
+    valid_sampler = DistributedSampler(valid_iter_map) if is_distributed else None
 
     train_dataloader = DataLoader(
-        to_map_style_dataset(train_iter),
+        train_iter_map,
         batch_size=batch_size,
         shuffle=(train_sampler is None),
         sampler=train_sampler,
         collate_fn=collate_fn,
     )
     valid_dataloader = DataLoader(
-        to_map_style_dataset(valid_iter),
+        valid_iter_map,
         batch_size=batch_size,
         shuffle=(valid_sampler is None),
         sampler=valid_sampler,
@@ -1629,10 +1627,10 @@ def train_worker(
     warmup=2000,
     file_prefix="iwslt",
 ):
+    print("train_worker called")
     # for debugging
     # wandb.init(project="at2021", entity="subramen", group="DDP")
     # wandb.init(project="at2021", entity="avh", mode="disabled")
-
     print(f"Using GPU: {gpu} for training")
     torch.cuda.set_device(gpu)
     is_main_process = gpu == 0
@@ -1643,12 +1641,11 @@ def train_worker(
     model.cuda(gpu)
     module = model
 
-    if ngpus_per_node > 1:
-        dist.init_process_group(
-            "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
-        )
-        model = DDP(model, device_ids=[gpu])
-        module = model.module
+    dist.init_process_group(
+        "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
+    )
+    model = DDP(model, device_ids=[gpu])
+    module = model.module
 
     # for debugging
     # if is_main_process:
@@ -1658,6 +1655,8 @@ def train_worker(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda(gpu)
+    
+    print(f"Creating dataloaders")
 
     train_dataloader, valid_dataloader = create_dataloaders(
         gpu,
@@ -1668,6 +1667,7 @@ def train_worker(
         batch_size=batch_size // ngpus_per_node,
         max_padding=max_padding,
     )
+    print(f"Creating optimizer")
 
     optimizer = torch.optim.Adam(
         model.parameters(), lr=base_lr, betas=(0.9, 0.98), eps=1e-9
@@ -1679,6 +1679,8 @@ def train_worker(
     train_state = TrainState()
 
     for epoch in range(num_epochs):
+        print(f"train worker epoch {epoch}")
+
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
 
@@ -1717,6 +1719,9 @@ def train_worker(
         )
         print(sloss)
         torch.cuda.empty_cache()
+        
+    print(f"train worker finished")
+
 
     if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
@@ -1725,60 +1730,65 @@ def train_worker(
 
     # wandb.finish()
 
+# %%
+# minimal example
 
 # %%
-torch.cuda.device_count()
+world_size=1
+
+def spawn_test(gpu):
+    print(f"spawn_test called {gpu}")
+    dist.init_process_group(
+        "nccl", init_method="env://", rank=gpu, world_size=world_size
+    )    
+    train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=("de", "en"))
+    dset = to_map_style_dataset(train_iter)
+    print("Instantiating DistributedSampler")    
+    train_sampler = DistributedSampler(dset)
+    print("Done")
+
 
 # %%
-# %pdb
+def runme():
+    from the_annotated_transformer import spawn_test
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    mp.spawn(spawn_test, nprocs=world_size)
+
 
 # %%
-# %pdb
+if __name__ == "__main__":
+    runme()
 
-# %%
-train_iter, valid_iter, test_iter = datasets.IWSLT2016(language_pair=("de", "en"))
 
 # %% tags=[]
-create_model = True
-
-
 def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
     from the_annotated_transformer import train_worker    
-
     ngpus = torch.cuda.device_count()
-    # if ngpus > 1:  # use DDP
-    if False:  # use DDP
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = "12355"
-        mp.spawn(
-            train_worker,
-            nprocs=ngpus,
-            args=(
-                ngpus,
-                vocab_src,
-                vocab_tgt,
-                spacy_de,
-                spacy_en,
-                *train_args.values(),
-            ),
-        )
-    else:  # single GPU
-        train_worker(
-            0,
-            1,
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12355"
+    # set_trace()
+    print("train_model called")
+    mp.spawn(
+        train_worker,
+        nprocs=ngpus,
+        args=(
+            ngpus,
             vocab_src,
             vocab_tgt,
             spacy_de,
             spacy_en,
             *train_args.values(),
-        )
+        ),
+    )
 
 
 def load_trained_model(create_model):
     config = {
-        "batch_size": 320,
-        "num_epochs": 50,
-        "accum_iter": 5,
+        "batch_size": 180,
+        # "num_epochs": 50,
+        "num_epochs": 2,
+        "accum_iter": 10,
         "base_lr": 1.0,
         "max_padding": 72,
         "warmup": 3000,
