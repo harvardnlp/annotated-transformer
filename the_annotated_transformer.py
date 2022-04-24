@@ -85,16 +85,19 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+# Set to False to skip notebook execution (e.g. for debugging)
+RUN_EXAMPLES = True 
+
+def is_interactive_notebook():
+    return __name__ == "__main__"
 
 def show_example(fn, args=[]):
-    if __name__ == "__main__":
+    if __name__ == "__main__" and RUN_EXAMPLES:
         return fn(*args)
 
-
-def train_example(fn, args=[]):
-    if __name__ == "__main__":
+def execute_example(fn, args=[]):
+    if __name__ == "__main__" and RUN_EXAMPLES:
         fn(*args)
-
 
 class NoopOptimizer(torch.optim.Optimizer):
     def __init__(self):
@@ -790,12 +793,6 @@ def make_model(
     return model
 
 
-# %% id="azdUh766TsqI"
-# Small example model.
-
-tmp_model = make_model(11, 11, 2)
-
-
 # %% [markdown]
 # ## Inference:
 #
@@ -808,19 +805,19 @@ tmp_model = make_model(11, 11, 2)
 
 # %%
 def inference_test():
-    tmp_model = make_model(11, 11, 2)
-    tmp_model.eval()
+    test_model = make_model(11, 11, 2)
+    test_model.eval()
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
 
-    memory = tmp_model.encode(src, src_mask)
+    memory = test_model.encode(src, src_mask)
     ys = torch.zeros(1, 1).type_as(src)
 
     for i in range(9):
-        out = tmp_model.decode(
+        out = test_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
         )
-        prob = tmp_model.generator(out[:, -1])
+        prob = test_model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
         ys = torch.cat(
@@ -936,24 +933,7 @@ def run_epoch(
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
-        if i % 10 == 1 and mode == "train+log":
-            lr = optimizer.param_groups[0]["lr"]
-            elapsed = time.time() - start
-#             wandb.log(
-#                 {
-#                     "step": i,
-#                     "accum_step": n_accum,
-#                     "loss": loss / batch.ntokens,
-#                     "tokens_per_sec": tokens / elapsed,
-#                     "lr": lr,
-#                     "samples": i * batch.src.shape[0],
-#                     "total_microbatch_step": train_state.step,
-#                     "total_accum_step": train_state.accum_step,
-#                     "total_samples": train_state.samples,
-#                     "total_tokens": train_state.tokens,
-#                 }
-#             )
-        if i % 20 == 1 and (mode == "train" or mode == "train+log"):
+        if i % 40 == 1 and (mode == "train" or mode == "train+log"):
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
@@ -984,32 +964,6 @@ def run_epoch(
 # Sentence pairs were batched together by approximate sequence length.
 # Each training batch contained a set of sentence pairs containing
 # approximately 25000 source tokens and 25000 target tokens.
-
-# %% [markdown] id="J0w5i6oHTsqJ"
-#
-# > We will use torch text for batching. This is discussed in more
-# > detail below. Here we create batches in a torchtext function that
-# > ensures our batch size padded to the maximum batchsize does not
-# > surpass a threshold (25000 if we have 8 gpus).
-
-# %% id="AdVWZ0Q2okC7"
-global max_src_in_batch, max_tgt_in_batch
-
-
-def batch_size_fn(new, count, sofar):
-
-    "Keep augmenting batch and calculate total number of tokens + padding."
-
-    global max_src_in_batch, max_tgt_in_batch
-    if count == 1:
-        max_src_in_batch = 0
-        max_tgt_in_batch = 0
-    max_src_in_batch = max(max_src_in_batch, len(new[0]))
-    max_tgt_in_batch = max(max_tgt_in_batch, len(new[1]) + 2)
-    src_elements = count * max_src_in_batch
-    tgt_elements = count * max_tgt_in_batch
-    return max(src_elements, tgt_elements)
-
 
 # %% [markdown] id="F1mTQatiTsqJ" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Hardware and Schedule
@@ -1068,13 +1022,11 @@ def example_learning_schedule():
     opts = [
         [512, 1, 4000],  # example 1
         [512, 1, 8000],  # example 2
-        [256, 1, 4000],
-    ]  # example 3
+        [256, 1, 4000],  # example 3
+    ]  
 
-    # dummy_model = make_model(10, 10, 2)
     dummy_model = torch.nn.Linear(1, 1)
-
-    show_list = []
+    learning_rates = []
 
     # we have 3 examples in opts list.
     for idx, example in enumerate(opts):
@@ -1086,14 +1038,14 @@ def example_learning_schedule():
             optimizer=optimizer, lr_lambda=lambda step: rate(step, *example)
         )
         tmp = []
+        # take 20K dummy training steps, save the learning rate at each step
         for step in range(20000):
             tmp.append(optimizer.param_groups[0]["lr"])
             optimizer.step()
             lr_scheduler.step()
-            # optimizer.zero_grad(set_to_none=True)
-        show_list.append(tmp)
+        learning_rates.append(tmp)
 
-    show_list = torch.tensor(show_list)
+    learning_rates = torch.tensor(learning_rates)
 
     # Enable altair to handle more than 5000 rows
     alt.data_transformers.disable_max_rows()
@@ -1102,11 +1054,11 @@ def example_learning_schedule():
         [
             pd.DataFrame(
                 {
-                    "Learning Rate": show_list[warmup_idx, :],
+                    "Learning Rate": learning_rates[warmup_idx, :],
                     "model_size:warmup": ["512:4000", "512:8000", "256:4000"][
                         warmup_idx
                     ],
-                    "step": list(range(20000)),
+                    "step": range(20000),
                 }
             )
             for warmup_idx in [0, 1, 2]
@@ -1121,7 +1073,8 @@ def example_learning_schedule():
     )
 
 
-# example_learning_schedule()
+example_learning_schedule()
+
 
 # %% [markdown] id="7T1uD15VTsqK"
 # ## Regularization
@@ -1215,7 +1168,8 @@ def example_label_smoothing():
     )
 
 
-# show_example(example_label_smoothing)
+show_example(example_label_smoothing)
+
 
 # %% [markdown] id="CGM8J1veTsqK"
 #
@@ -1247,7 +1201,8 @@ def penalization_visualization():
     )
 
 
-# show_example(penalization_visualization)
+show_example(penalization_visualization)
+
 
 # %% [markdown] id="67lUqeLXTsqK"
 # # A First  Example
@@ -1260,10 +1215,10 @@ def penalization_visualization():
 # ## Synthetic Data
 
 # %% id="g1aTxeqqTsqK"
-def data_gen(V, batch, nbatches):
+def data_gen(V, batch_size, nbatches):
     "Generate random data for a src-tgt copy task."
     for i in range(nbatches):
-        data = torch.randint(1, V, size=(batch, 10))
+        data = torch.randint(1, V, size=(batch_size, 10))
         data[:, 0] = 1
         src = data.requires_grad_(False).clone().detach()
         tgt = data.requires_grad_(False).clone().detach()
@@ -1329,14 +1284,16 @@ def example_simple_model():
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
         lr_lambda=lambda step: rate(
-            step, model_size=model.src_embed[0].d_model, factor=1, warmup=400
+            step, model_size=model.src_embed[0].d_model, factor=1.0, warmup=200
         ),
     )
 
-    for epoch in range(10):
+    batch_size = 60
+    for epoch in range(20):
+        print(f"Epoch {epoch}")
         model.train()
         run_epoch(
-            data_gen(V, 30, 20),
+            data_gen(V, batch_size, 20),
             model,
             SimpleLossCompute(model.generator, criterion),
             optimizer,
@@ -1345,7 +1302,7 @@ def example_simple_model():
         )
         model.eval()
         run_epoch(
-            data_gen(V, 30, 5),
+            data_gen(V, batch_size, 5),
             model,
             SimpleLossCompute(model.generator, criterion),
             NoopOptimizer(),
@@ -1356,11 +1313,12 @@ def example_simple_model():
 
     model.eval()
     src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
-    src_mask = torch.ones(1, 1, 10)
-    print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=0))
+    max_len = src.shape[1]
+    src_mask = torch.ones(1, 1, max_len)
+    print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
 
+execute_example(example_simple_model)
 
-# train_example(example_simple_model)
 
 # %% [markdown] id="OpuQv2GsTsqL"
 # # Part 3: A Real World Example
@@ -1381,12 +1339,7 @@ def example_simple_model():
 # Load spacy tokenizer models, download them if they haven't been
 # downloaded already
 
-spacy_de = None
-spacy_en = None
-
-
 def load_tokenizers():
-    global spacy_de, spacy_en
 
     try:
         spacy_de = spacy.load("de_core_news_sm")
@@ -1399,6 +1352,8 @@ def load_tokenizers():
     except IOError:
         os.system("python -m spacy download en_core_web_sm")
         spacy_en = spacy.load("en_core_web_sm")
+    
+    return spacy_de, spacy_en
 
 
 # %% id="t4BszXXJTsqL" tags=[]
@@ -1417,12 +1372,9 @@ train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
 # %% id="jU3kVlV5okC-" tags=[]
 
 
-def build_vocabulary():
-    def tokenize_de(text):
-        return tokenize(text, spacy_de)
-
-    def tokenize_en(text):
-        return tokenize(text, spacy_en)
+def build_vocabulary(spacy_de, spacy_en):
+    tokenize_de = lambda text: tokenize(text, spacy_de)
+    tokenize_en = lambda text: tokenize(text, spacy_en)
 
     print("Building German Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
@@ -1446,24 +1398,21 @@ def build_vocabulary():
     return vocab_src, vocab_tgt
 
 
-def load_vocab():
-    global vocab_src, vocab_tgt
-
+def load_vocab(spacy_de, spacy_en):
     if not exists("vocab.pt"):
-        vocab_src, vocab_tgt = build_vocabulary()
+        vocab_src, vocab_tgt = build_vocabulary(spacy_de, spacy_en)
         torch.save((vocab_src, vocab_tgt), "vocab.pt")
     else:
         vocab_src, vocab_tgt = torch.load("vocab.pt")
     print("Finished.\nVocabulary sizes:")
     print(len(vocab_src))
     print(len(vocab_tgt))
+    return vocab_src, vocab_tgt
 
-vocab_src = None
-vocab_tgt = None
-
-    
-show_example(load_tokenizers)
-show_example(load_vocab)
+if is_interactive_notebook():
+    # global variables used later in the script
+    spacy_de, spacy_en = show_example(load_tokenizers)
+    vocab_src, vocab_tgt = show_example(load_vocab, args=[spacy_de, spacy_en])
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1707,7 +1656,6 @@ def train_worker(
         
     print(f"train worker finished")
 
-
     if is_main_process:
         file_path = "%sfinal.pt" % file_prefix
         torch.save(module.state_dict(), file_path)
@@ -1739,19 +1687,19 @@ def load_trained_model(create_model):
     config = {
         "batch_size": 150,
         # "num_epochs": 50,
-        "num_epochs": 5,
+        "num_epochs": 10,
         "accum_iter": 10,
         "base_lr": 1.0,
         "max_padding": 72,
         "warmup": 3000,
-        "file_prefix": "iwslt_sd_",
+        "file_prefix": "iwslt_model_",
     }
 
     if create_model:
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
 
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(torch.load("iwslt_sd_final.pt"))
+    model.load_state_dict(torch.load("iwslt_model_final.pt"))
     return model
 
 
@@ -1857,9 +1805,6 @@ def average(model, models):
 # > replication gets to 26.9 on EN-DE WMT. Here I have loaded in those
 # > parameters to our reimplemenation.
 
-# %% id="LHLDc7enokDB"
-# # !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
-
 # %%
 # Load data and model for output checks
 
@@ -1908,12 +1853,10 @@ def check_outputs(
     return results
 
 
-example_data = None
-
-
-def run_model_example():
-    global example_data, vocab_src, vocab_tgt
-
+def run_model_example(n_examples=5):
+    global vocab_src, vocab_tgt, spacy_de, spacy_en
+    
+    print("Preparing Data ...")
     _, valid_dataloader = create_dataloaders(
         torch.device("cpu"),
         vocab_src,
@@ -1924,17 +1867,21 @@ def run_model_example():
         is_distributed=False,
     )
 
+    print("Loading Trained Model ...")
+
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.load_state_dict(
-        torch.load("iwslt_sd_final.pt", map_location=torch.device("cpu"))
+        torch.load("iwslt_model_final.pt", map_location=torch.device("cpu"))
     )
-
+    
+    print("Checking Model Outputs:")
     example_data = check_outputs(
-        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
+        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=n_examples
     )
+    return model, example_data
 
 
-show_example(run_model_example)
+execute_example(run_model_example)
 
 
 # %% [markdown] id="0ZkkNTKLTsqO"
@@ -2031,13 +1978,27 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
     ).properties(title="Layer %d" % (layer + 1))
 
 
+# %%
+# model.encoder.layers[0].self_attn
+
+# %%
+def test_model():
+    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
+    model.load_state_dict(
+        torch.load("iwslt_sd_final.pt", map_location=torch.device("cpu"))
+    )
+    example_data = check_outputs(
+        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=1
+    )
+    return model
+
+
 # %% [markdown]
 # ## Encoder Self Attention
 
 # %% tags=[]
 def viz_encoder_self():
-    global example_data
-
+    model, example_data = run_model_example(n_examples=1)
     example = example_data[
         len(example_data) - 1
     ]  # batch object for the final example
@@ -2048,7 +2009,7 @@ def viz_encoder_self():
         )
         for layer in range(6)
     ]
-    alt.hconcat(
+    return alt.hconcat(
         layer_viz[0]
         & layer_viz[1]
         & layer_viz[2]
@@ -2066,8 +2027,7 @@ show_example(viz_encoder_self)
 
 # %% tags=[]
 def viz_decoder_self():
-    global example_data
-
+    model, example_data = run_model_example(n_examples=1)
     example = example_data[len(example_data) - 1]
 
     layer_viz = [
@@ -2081,7 +2041,7 @@ def viz_decoder_self():
         )
         for layer in range(6)
     ]
-    alt.hconcat(
+    return alt.hconcat(
         layer_viz[0]
         & layer_viz[1]
         & layer_viz[2]
@@ -2099,8 +2059,7 @@ show_example(viz_decoder_self)
 
 # %% tags=[]
 def viz_decoder_src():
-    global example_data
-
+    model, example_data = run_model_example(n_examples=1)
     example = example_data[len(example_data) - 1]
 
     layer_viz = [
@@ -2114,7 +2073,7 @@ def viz_decoder_src():
         )
         for layer in range(6)
     ]
-    alt.hconcat(
+    return alt.hconcat(
         layer_viz[0]
         & layer_viz[1]
         & layer_viz[2]
@@ -2135,5 +2094,3 @@ show_example(viz_decoder_src)
 #
 # > Cheers,
 # > srush
-
-# %%
