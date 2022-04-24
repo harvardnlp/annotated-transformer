@@ -1737,9 +1737,9 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
 
 def load_trained_model(create_model):
     config = {
-        "batch_size": 160,
+        "batch_size": 150,
         # "num_epochs": 50,
-        "num_epochs": 2,
+        "num_epochs": 5,
         "accum_iter": 10,
         "base_lr": 1.0,
         "max_padding": 72,

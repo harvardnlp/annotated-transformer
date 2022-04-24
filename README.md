@@ -10,6 +10,21 @@ Use `requirements.txt` to install library dependencies with pip:
 pip install -r requirements.txt
 ```
 
+# torchtext 0.12 unable to download IWSLT2016 - temporary workaround
+
+Unfortunately the current version of torchtext does not download the IWSLT2016 dataset due to [a bug reported here](https://github.com/pytorch/text/issues/1676).
+
+For the time being, follow the instructions from the issue (reproduced here) to download the dataset manually.
+
+1. Download the IWSLT2016 data manually from [this link](https://drive.google.com/file/d/1l5y6Giag9aRPwGtuZHswh3w5v3qEz8D8/view). If the download worked the file size should be close to 187.6 MB in size.
+
+2. When opening the annotated transformer notebook, in the jupyter lab file browser, click the upload button to upload the 2016-01.tgz file downloaded in step 1.
+
+3. Open a terminal and move `2016-01.tgz` from the notebook folder to `~/.torchtext/cache/IWSLT2016/` using `mv 2016-01.tgz ~/.torchtext/cache/IWSLT2016/`. This is the cache location where torchtext checks for the dataset if it has already been downloaded.
+
+Once torchtext resolves the download problem we should be able to eliminate these steps, [track the issue](https://drive.google.com/file/d/1l5y6Giag9aRPwGtuZHswh3w5v3qEz8D8/view) for the current status of the issue resolution.
+
+
 # Notebook Setup
 
 The Annotated Transformer is created using [jupytext](https://github.com/mwouts/jupytext).
