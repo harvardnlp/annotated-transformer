@@ -85,20 +85,29 @@ import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
-# temporary for debugging - remove before final version
-import wandb
+# Set to False to skip notebook execution (e.g. for debugging)
+RUN_EXAMPLES = True
+
+
+# %%
+# Some convenience helper functions used throughout the notebook
+
+
+def is_interactive_notebook():
+    return __name__ == "__main__"
 
 
 def show_example(fn, args=[]):
-    if __name__ == "__main__":
+    if __name__ == "__main__" and RUN_EXAMPLES:
         return fn(*args)
 
 
-def train_example(fn, args=[]):
-    fn(*args)
+def execute_example(fn, args=[]):
+    if __name__ == "__main__" and RUN_EXAMPLES:
+        fn(*args)
 
 
-class NoopOptimizer(torch.optim.Optimizer):
+class DummyOptimizer(torch.optim.Optimizer):
     def __init__(self):
         self.param_groups = [{"lr": 0}]
         None
@@ -110,7 +119,7 @@ class NoopOptimizer(torch.optim.Optimizer):
         None
 
 
-class NoopScheduler:
+class DummyScheduler:
     def step(self):
         None
 
@@ -792,12 +801,6 @@ def make_model(
     return model
 
 
-# %% id="azdUh766TsqI"
-# Small example model.
-
-tmp_model = make_model(11, 11, 2)
-
-
 # %% [markdown]
 # ## Inference:
 #
@@ -810,19 +813,19 @@ tmp_model = make_model(11, 11, 2)
 
 # %%
 def inference_test():
-    tmp_model = make_model(11, 11, 2)
-    tmp_model.eval()
+    test_model = make_model(11, 11, 2)
+    test_model.eval()
     src = torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]])
     src_mask = torch.ones(1, 1, 10)
 
-    memory = tmp_model.encode(src, src_mask)
+    memory = test_model.encode(src, src_mask)
     ys = torch.zeros(1, 1).type_as(src)
 
     for i in range(9):
-        out = tmp_model.decode(
+        out = test_model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
         )
-        prob = tmp_model.generator(out[:, -1])
+        prob = test_model.generator(out[:, -1])
         _, next_word = torch.max(prob, dim=1)
         next_word = next_word.data[0]
         ys = torch.cat(
@@ -938,30 +941,13 @@ def run_epoch(
         total_loss += loss
         total_tokens += batch.ntokens
         tokens += batch.ntokens
-        if i % 10 == 1 and mode == "train+log":
-            lr = optimizer.param_groups[0]["lr"]
-            elapsed = time.time() - start
-            wandb.log(
-                {
-                    "step": i,
-                    "accum_step": n_accum,
-                    "loss": loss / batch.ntokens,
-                    "tokens_per_sec": tokens / elapsed,
-                    "lr": lr,
-                    "samples": i * batch.src.shape[0],
-                    "total_microbatch_step": train_state.step,
-                    "total_accum_step": train_state.accum_step,
-                    "total_samples": train_state.samples,
-                    "total_tokens": train_state.tokens,
-                }
-            )
-        if i % 20 == 1 and (mode == "train" or mode == "train+log"):
+        if i % 40 == 1 and (mode == "train" or mode == "train+log"):
             lr = optimizer.param_groups[0]["lr"]
             elapsed = time.time() - start
             print(
                 (
                     "Epoch Step: %6d | Accumulation Step: %3d | Loss: %6.2f "
-                    + "| Tokens per Sec: %7.1f | Learning Rate: %10.1e"
+                    + "| Tokens / Sec: %7.1f | Learning Rate: %6.1e"
                 )
                 % (i, n_accum, loss / batch.ntokens, tokens / elapsed, lr)
             )
@@ -986,32 +972,6 @@ def run_epoch(
 # Sentence pairs were batched together by approximate sequence length.
 # Each training batch contained a set of sentence pairs containing
 # approximately 25000 source tokens and 25000 target tokens.
-
-# %% [markdown] id="J0w5i6oHTsqJ"
-#
-# > We will use torch text for batching. This is discussed in more
-# > detail below. Here we create batches in a torchtext function that
-# > ensures our batch size padded to the maximum batchsize does not
-# > surpass a threshold (25000 if we have 8 gpus).
-
-# %% id="AdVWZ0Q2okC7"
-global max_src_in_batch, max_tgt_in_batch
-
-
-def batch_size_fn(new, count, sofar):
-
-    "Keep augmenting batch and calculate total number of tokens + padding."
-
-    global max_src_in_batch, max_tgt_in_batch
-    if count == 1:
-        max_src_in_batch = 0
-        max_tgt_in_batch = 0
-    max_src_in_batch = max(max_src_in_batch, len(new[0]))
-    max_tgt_in_batch = max(max_tgt_in_batch, len(new[1]) + 2)
-    src_elements = count * max_src_in_batch
-    tgt_elements = count * max_tgt_in_batch
-    return max(src_elements, tgt_elements)
-
 
 # %% [markdown] id="F1mTQatiTsqJ" jp-MarkdownHeadingCollapsed=true tags=[]
 # ## Hardware and Schedule
@@ -1070,13 +1030,11 @@ def example_learning_schedule():
     opts = [
         [512, 1, 4000],  # example 1
         [512, 1, 8000],  # example 2
-        [256, 1, 4000],
-    ]  # example 3
+        [256, 1, 4000],  # example 3
+    ]
 
-    # dummy_model = make_model(10, 10, 2)
     dummy_model = torch.nn.Linear(1, 1)
-
-    show_list = []
+    learning_rates = []
 
     # we have 3 examples in opts list.
     for idx, example in enumerate(opts):
@@ -1088,14 +1046,14 @@ def example_learning_schedule():
             optimizer=optimizer, lr_lambda=lambda step: rate(step, *example)
         )
         tmp = []
+        # take 20K dummy training steps, save the learning rate at each step
         for step in range(20000):
             tmp.append(optimizer.param_groups[0]["lr"])
             optimizer.step()
             lr_scheduler.step()
-            # optimizer.zero_grad(set_to_none=True)
-        show_list.append(tmp)
+        learning_rates.append(tmp)
 
-    show_list = torch.tensor(show_list)
+    learning_rates = torch.tensor(learning_rates)
 
     # Enable altair to handle more than 5000 rows
     alt.data_transformers.disable_max_rows()
@@ -1104,11 +1062,11 @@ def example_learning_schedule():
         [
             pd.DataFrame(
                 {
-                    "Learning Rate": show_list[warmup_idx, :],
+                    "Learning Rate": learning_rates[warmup_idx, :],
                     "model_size:warmup": ["512:4000", "512:8000", "256:4000"][
                         warmup_idx
                     ],
-                    "step": list(range(20000)),
+                    "step": range(20000),
                 }
             )
             for warmup_idx in [0, 1, 2]
@@ -1123,7 +1081,7 @@ def example_learning_schedule():
     )
 
 
-# example_learning_schedule()
+example_learning_schedule()
 
 
 # %% [markdown] id="7T1uD15VTsqK"
@@ -1218,7 +1176,8 @@ def example_label_smoothing():
     )
 
 
-# show_example(example_label_smoothing)
+show_example(example_label_smoothing)
+
 
 # %% [markdown] id="CGM8J1veTsqK"
 #
@@ -1226,18 +1185,21 @@ def example_label_smoothing():
 # > very confident about a given choice.
 
 # %% id="78EHzLP7TsqK"
-crit = LabelSmoothing(5, 0, 0.1)
 
 
-def loss(x):
+def loss(x, crit):
     d = x + 3 * 1
     predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d]])
     return crit(predict.log(), torch.LongTensor([1])).data
 
 
-def example_label_smoothing2():
+def penalization_visualization():
+    crit = LabelSmoothing(5, 0, 0.1)
     loss_data = pd.DataFrame(
-        {"Loss": [loss(x) for x in range(1, 100)], "Steps": list(range(99))}
+        {
+            "Loss": [loss(x, crit) for x in range(1, 100)],
+            "Steps": list(range(99)),
+        }
     ).astype("float")
 
     return (
@@ -1251,7 +1213,8 @@ def example_label_smoothing2():
     )
 
 
-# show_example(example_label_smoothing2)
+show_example(penalization_visualization)
+
 
 # %% [markdown] id="67lUqeLXTsqK"
 # # A First  Example
@@ -1264,10 +1227,10 @@ def example_label_smoothing2():
 # ## Synthetic Data
 
 # %% id="g1aTxeqqTsqK"
-def data_gen(V, batch, nbatches):
+def data_gen(V, batch_size, nbatches):
     "Generate random data for a src-tgt copy task."
     for i in range(nbatches):
-        data = torch.randint(1, V, size=(batch, 10))
+        data = torch.randint(1, V, size=(batch_size, 10))
         data[:, 0] = 1
         src = data.requires_grad_(False).clone().detach()
         tgt = data.requires_grad_(False).clone().detach()
@@ -1328,19 +1291,20 @@ def example_simple_model():
     model = make_model(V, V, N=2)
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=0.5, betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
         lr_lambda=lambda step: rate(
-            step, model_size=model.src_embed[0].d_model, factor=1, warmup=400
+            step, model_size=model.src_embed[0].d_model, factor=1.0, warmup=400
         ),
     )
 
-    for epoch in range(10):
+    batch_size = 80
+    for epoch in range(20):
         model.train()
         run_epoch(
-            data_gen(V, 30, 20),
+            data_gen(V, batch_size, 20),
             model,
             SimpleLossCompute(model.generator, criterion),
             optimizer,
@@ -1348,24 +1312,24 @@ def example_simple_model():
             mode="train",
         )
         model.eval()
-        print(
-            run_epoch(
-                data_gen(V, 30, 5),
-                model,
-                SimpleLossCompute(model.generator, criterion),
-                NoopOptimizer(),
-                NoopScheduler(),
-                mode="eval",
-            )[0]
-        )
+        run_epoch(
+            data_gen(V, batch_size, 5),
+            model,
+            SimpleLossCompute(model.generator, criterion),
+            DummyOptimizer(),
+            DummyScheduler(),
+            mode="eval",
+        )[0]
 
     model.eval()
     src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
-    src_mask = torch.ones(1, 1, 10)
-    print(greedy_decode(model, src, src_mask, max_len=10, start_symbol=0))
+    max_len = src.shape[1]
+    src_mask = torch.ones(1, 1, max_len)
+    print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
 
 
-# train_example(example_simple_model)
+execute_example(example_simple_model)
+
 
 # %% [markdown] id="OpuQv2GsTsqL"
 # # Part 3: A Real World Example
@@ -1386,12 +1350,8 @@ def example_simple_model():
 # Load spacy tokenizer models, download them if they haven't been
 # downloaded already
 
-spacy_de = None
-spacy_en = None
-
 
 def load_tokenizers():
-    global spacy_de, spacy_en
 
     try:
         spacy_de = spacy.load("de_core_news_sm")
@@ -1404,6 +1364,8 @@ def load_tokenizers():
     except IOError:
         os.system("python -m spacy download en_core_web_sm")
         spacy_en = spacy.load("en_core_web_sm")
+
+    return spacy_de, spacy_en
 
 
 # %% id="t4BszXXJTsqL" tags=[]
@@ -1419,7 +1381,7 @@ def yield_tokens(data_iter, tokenizer, index):
 # %% id="jU3kVlV5okC-" tags=[]
 
 
-def build_vocabulary():
+def build_vocabulary(spacy_de, spacy_en):
     def tokenize_de(text):
         return tokenize(text, spacy_de)
 
@@ -1448,25 +1410,22 @@ def build_vocabulary():
     return vocab_src, vocab_tgt
 
 
-vocab_src = None
-vocab_tgt = None
-
-
-def load_vocab():
-    global vocab_src, vocab_tgt
-
+def load_vocab(spacy_de, spacy_en):
     if not exists("vocab.pt"):
-        vocab_src, vocab_tgt = build_vocabulary()
+        vocab_src, vocab_tgt = build_vocabulary(spacy_de, spacy_en)
         torch.save((vocab_src, vocab_tgt), "vocab.pt")
     else:
         vocab_src, vocab_tgt = torch.load("vocab.pt")
     print("Finished.\nVocabulary sizes:")
     print(len(vocab_src))
     print(len(vocab_tgt))
+    return vocab_src, vocab_tgt
 
 
-show_example(load_tokenizers)
-show_example(load_vocab)
+if is_interactive_notebook():
+    # global variables used later in the script
+    spacy_de, spacy_en = show_example(load_tokenizers)
+    vocab_src, vocab_tgt = show_example(load_vocab, args=[spacy_de, spacy_en])
 
 
 # %% [markdown] id="-l-TFwzfTsqL"
@@ -1541,7 +1500,6 @@ def collate_batch(
     src = torch.stack(src_list)
     tgt = torch.stack(tgt_list)
     return (src, tgt)
-    # return src.to(device), tgt.to(device)
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
@@ -1577,18 +1535,27 @@ def create_dataloaders(
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
         language_pair=("de", "en")
     )
-    train_sampler = DistributedSampler(train_iter) if is_distributed else None
-    valid_sampler = DistributedSampler(valid_iter) if is_distributed else None
+
+    train_iter_map = to_map_style_dataset(
+        train_iter
+    )  # DistributedSampler needs a dataset len()
+    train_sampler = (
+        DistributedSampler(train_iter_map) if is_distributed else None
+    )
+    valid_iter_map = to_map_style_dataset(valid_iter)
+    valid_sampler = (
+        DistributedSampler(valid_iter_map) if is_distributed else None
+    )
 
     train_dataloader = DataLoader(
-        to_map_style_dataset(train_iter),
+        train_iter_map,
         batch_size=batch_size,
         shuffle=(train_sampler is None),
         sampler=train_sampler,
         collate_fn=collate_fn,
     )
     valid_dataloader = DataLoader(
-        to_map_style_dataset(valid_iter),
+        valid_iter_map,
         batch_size=batch_size,
         shuffle=(valid_sampler is None),
         sampler=valid_sampler,
@@ -1597,37 +1564,14 @@ def create_dataloaders(
     return train_dataloader, valid_dataloader
 
 
-#
-# > Now we train the model. I will play with the warmup steps a bit,
-# > but everything else uses the default parameters.  On an AWS
-# > p3.8xlarge with 4 Tesla V100s, this runs at ~27,000 tokens per
-# > second with a batch size of 12,000
-
 # %% [markdown] id="90qM8RzCTsqM"
 # ## Training the System
 
-# %% id="Kx53VVTgTsqM" tags=[]
-# #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 # %%
 def train_worker(
-    gpu,
-    ngpus_per_node,
-    vocab_src,
-    vocab_tgt,
-    spacy_de,
-    spacy_en,
-    batch_size=64,
-    num_epochs=10,
-    accum_iter=12000 / 64,
-    base_lr=1.0,
-    max_padding=128,
-    warmup=2000,
-    file_prefix="iwslt",
+    gpu, ngpus_per_node, vocab_src, vocab_tgt, spacy_de, spacy_en, config
 ):
-    # for debugging
-    wandb.init(project="at2021", entity="subramen", group="DDP")
-
-    print(f"Using GPU: {gpu} for training")
+    print(f"Train worker process using GPU: {gpu} for training", flush=True)
     torch.cuda.set_device(gpu)
     is_main_process = gpu == 0
 
@@ -1637,21 +1581,18 @@ def train_worker(
     model.cuda(gpu)
     module = model
 
-    if ngpus_per_node > 1:
-        dist.init_process_group(
-            "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
-        )
-        model = DDP(model, device_ids=[gpu])
-        module = model.module
-
-    # for debugging
-    if is_main_process:
-        wandb.watch(model)
+    dist.init_process_group(
+        "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
+    )
+    model = DDP(model, device_ids=[gpu])
+    module = model.module
 
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda(gpu)
+
+    print(f"Creating dataloaders", flush=True)
 
     train_dataloader, valid_dataloader = create_dataloaders(
         gpu,
@@ -1659,28 +1600,29 @@ def train_worker(
         vocab_tgt,
         spacy_de,
         spacy_en,
-        batch_size=batch_size // ngpus_per_node,
-        max_padding=max_padding,
+        batch_size=config["batch_size"] // ngpus_per_node,
+        max_padding=config["max_padding"],
     )
+    print(f"Creating optimizer")
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=base_lr, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=config["base_lr"], betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
-        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
+        lr_lambda=lambda step: rate(
+            step, d_model, factor=1, warmup=config["warmup"]
+        ),
     )
     train_state = TrainState()
 
-    for epoch in range(num_epochs):
+    for epoch in range(config["num_epochs"]):
+
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
 
-        if is_main_process:
-            wandb.log({"epoch": epoch})
-
         model.train()
-        print(f"[GPU{gpu}] Epoch {epoch} Training ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Training ====", flush=True)
         _, train_state = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
             model,
@@ -1688,99 +1630,79 @@ def train_worker(
             optimizer,
             lr_scheduler,
             mode="train+log",
-            accum_iter=accum_iter,
+            accum_iter=config["accum_iter"],
             train_state=train_state,
         )
 
         GPUtil.showUtilization()
         if is_main_process:
-            file_path = "%s%.2d.pt" % (file_prefix, epoch)
+            file_path = "%s%.2d.pt" % (config["file_prefix"], epoch)
             torch.save(module.state_dict(), file_path)
-            # wandb.log_artifact(file_path, name=file_path, type="model")
         torch.cuda.empty_cache()
 
-        print(f"[GPU{gpu}] Epoch {epoch} Validation ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Validation ====", flush=True)
         model.eval()
         sloss = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
             model,
             SimpleLossCompute(module.generator, criterion),
-            NoopOptimizer(),
-            NoopScheduler(),
+            DummyOptimizer(),
+            DummyScheduler(),
             mode="eval",
         )
         print(sloss)
         torch.cuda.empty_cache()
 
+    print(f"train worker finished")
+
     if is_main_process:
-        file_path = "%sfinal.pt" % file_prefix
+        file_path = "%sfinal.pt" % config["file_prefix"]
         torch.save(module.state_dict(), file_path)
-        # wandb.log_artifact(file_path, name="final_model", type="model")
 
-    wandb.finish()
-
-
-# %%
-# for debugging - TODO remove this before final publication
-# assert(False)
 
 # %% tags=[]
-create_model = True
-
-
-def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
+def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
     from the_annotated_transformer import train_worker
 
     ngpus = torch.cuda.device_count()
-    if ngpus > 1:  # use DDP
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = "12355"
-        mp.spawn(
-            train_worker,
-            nprocs=ngpus,
-            args=(
-                ngpus,
-                vocab_src,
-                vocab_tgt,
-                spacy_de,
-                spacy_en,
-                *train_args.values(),
-            ),
-        )
-    else:  # single GPU
-        train_worker(
-            0,
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12356"
+    print(f"Number of GPUs detected: {ngpus}")
+    print("Spawning training processes ...")
+    mp.spawn(
+        train_worker,
+        nprocs=ngpus,
+        args=(
             ngpus,
             vocab_src,
             vocab_tgt,
             spacy_de,
             spacy_en,
-            *train_args.values(),
-        )
+            config,
+        ),
+    )
 
 
-def load_trained_model(create_model=True):
+def load_trained_model(create_model):
     config = {
-        "batch_size": 320,
-        "num_epochs": 50,
-        "accum_iter": 5,
+        "batch_size": 150,
+        "num_epochs": 8,
+        "accum_iter": 10,
         "base_lr": 1.0,
         "max_padding": 72,
         "warmup": 3000,
-        "file_prefix": "iwslt_sd_",
+        "file_prefix": "iwslt_model_",
     }
-
-    wandb.config = config  # for debugging
 
     if create_model:
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
 
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(torch.load("iwslt_sd_final.pt"))
+    model.load_state_dict(torch.load("iwslt_model_final.pt"))
     return model
 
 
-if __name__ == "__main__":
+if is_interactive_notebook():
     model = load_trained_model(create_model=True)
 
 
@@ -1882,9 +1804,6 @@ def average(model, models):
 # > replication gets to 26.9 on EN-DE WMT. Here I have loaded in those
 # > parameters to our reimplemenation.
 
-# %% id="LHLDc7enokDB"
-# # !wget https://s3.amazonaws.com/opennmt-models/en-de-model.pt
-
 # %%
 # Load data and model for output checks
 
@@ -1933,12 +1852,10 @@ def check_outputs(
     return results
 
 
-example_data = None
+def run_model_example(n_examples=5):
+    global vocab_src, vocab_tgt, spacy_de, spacy_en
 
-
-def run_model_example():
-    global example_data, vocab_src, vocab_tgt
-
+    print("Preparing Data ...")
     _, valid_dataloader = create_dataloaders(
         torch.device("cpu"),
         vocab_src,
@@ -1949,17 +1866,21 @@ def run_model_example():
         is_distributed=False,
     )
 
+    print("Loading Trained Model ...")
+
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.load_state_dict(
-        torch.load("iwslt_sd_final.pt", map_location=torch.device("cpu"))
+        torch.load("iwslt_model_final.pt", map_location=torch.device("cpu"))
     )
 
+    print("Checking Model Outputs:")
     example_data = check_outputs(
-        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=5
+        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=n_examples
     )
+    return model, example_data
 
 
-show_example(run_model_example)
+execute_example(run_model_example)
 
 
 # %% [markdown] id="0ZkkNTKLTsqO"
@@ -2061,8 +1982,7 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
 
 # %% tags=[]
 def viz_encoder_self():
-    global example_data
-
+    model, example_data = run_model_example(n_examples=1)
     example = example_data[
         len(example_data) - 1
     ]  # batch object for the final example
@@ -2073,7 +1993,7 @@ def viz_encoder_self():
         )
         for layer in range(6)
     ]
-    alt.hconcat(
+    return alt.hconcat(
         layer_viz[0]
         & layer_viz[1]
         & layer_viz[2]
@@ -2091,8 +2011,7 @@ show_example(viz_encoder_self)
 
 # %% tags=[]
 def viz_decoder_self():
-    global example_data
-
+    model, example_data = run_model_example(n_examples=1)
     example = example_data[len(example_data) - 1]
 
     layer_viz = [
@@ -2106,7 +2025,7 @@ def viz_decoder_self():
         )
         for layer in range(6)
     ]
-    alt.hconcat(
+    return alt.hconcat(
         layer_viz[0]
         & layer_viz[1]
         & layer_viz[2]
@@ -2124,8 +2043,7 @@ show_example(viz_decoder_self)
 
 # %% tags=[]
 def viz_decoder_src():
-    global example_data
-
+    model, example_data = run_model_example(n_examples=1)
     example = example_data[len(example_data) - 1]
 
     layer_viz = [
@@ -2139,7 +2057,7 @@ def viz_decoder_src():
         )
         for layer in range(6)
     ]
-    alt.hconcat(
+    return alt.hconcat(
         layer_viz[0]
         & layer_viz[1]
         & layer_viz[2]
@@ -2160,5 +2078,3 @@ show_example(viz_decoder_src)
 #
 # > Cheers,
 # > srush
-
-# %%
