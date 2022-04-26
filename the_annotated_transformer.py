@@ -1592,8 +1592,6 @@ def train_worker(
     )
     criterion.cuda(gpu)
 
-    print(f"Creating dataloaders", flush=True)
-
     train_dataloader, valid_dataloader = create_dataloaders(
         gpu,
         vocab_src,
@@ -1603,7 +1601,6 @@ def train_worker(
         batch_size=config["batch_size"] // ngpus_per_node,
         max_padding=config["max_padding"],
     )
-    print(f"Creating optimizer")
 
     optimizer = torch.optim.Adam(
         model.parameters(), lr=config["base_lr"], betas=(0.9, 0.98), eps=1e-9
@@ -1652,8 +1649,6 @@ def train_worker(
         )
         print(sloss)
         torch.cuda.empty_cache()
-
-    print(f"train worker finished")
 
     if is_main_process:
         file_path = "%sfinal.pt" % config["file_prefix"]
