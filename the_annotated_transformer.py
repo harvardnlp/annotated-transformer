@@ -86,22 +86,26 @@ import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
 # Set to False to skip notebook execution (e.g. for debugging)
-RUN_EXAMPLES = True 
+RUN_EXAMPLES = True
 
 
 # %%
 # Some convenience helper functions used throughout the notebook
 
+
 def is_interactive_notebook():
     return __name__ == "__main__"
+
 
 def show_example(fn, args=[]):
     if __name__ == "__main__" and RUN_EXAMPLES:
         return fn(*args)
 
+
 def execute_example(fn, args=[]):
     if __name__ == "__main__" and RUN_EXAMPLES:
         fn(*args)
+
 
 class DummyOptimizer(torch.optim.Optimizer):
     def __init__(self):
@@ -1027,7 +1031,7 @@ def example_learning_schedule():
         [512, 1, 4000],  # example 1
         [512, 1, 8000],  # example 2
         [256, 1, 4000],  # example 3
-    ]  
+    ]
 
     dummy_model = torch.nn.Linear(1, 1)
     learning_rates = []
@@ -1182,6 +1186,7 @@ show_example(example_label_smoothing)
 
 # %% id="78EHzLP7TsqK"
 
+
 def loss(x, crit):
     d = x + 3 * 1
     predict = torch.FloatTensor([[0, x / d, 1 / d, 1 / d, 1 / d]])
@@ -1189,9 +1194,12 @@ def loss(x, crit):
 
 
 def penalization_visualization():
-    crit = LabelSmoothing(5, 0, 0.1)    
+    crit = LabelSmoothing(5, 0, 0.1)
     loss_data = pd.DataFrame(
-        {"Loss": [loss(x, crit) for x in range(1, 100)], "Steps": list(range(99))}
+        {
+            "Loss": [loss(x, crit) for x in range(1, 100)],
+            "Steps": list(range(99)),
+        }
     ).astype("float")
 
     return (
@@ -1276,6 +1284,7 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
 # %% id="qgIZ2yEtdYwe" tags=[]
 # Train the simple copy task.
 
+
 def example_simple_model():
     V = 11
     criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
@@ -1312,12 +1321,12 @@ def example_simple_model():
             mode="eval",
         )[0]
 
-
     model.eval()
     src = torch.LongTensor([[0, 1, 2, 3, 4, 5, 6, 7, 8, 9]])
     max_len = src.shape[1]
     src_mask = torch.ones(1, 1, max_len)
     print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
+
 
 execute_example(example_simple_model)
 
@@ -1341,6 +1350,7 @@ execute_example(example_simple_model)
 # Load spacy tokenizer models, download them if they haven't been
 # downloaded already
 
+
 def load_tokenizers():
 
     try:
@@ -1354,7 +1364,7 @@ def load_tokenizers():
     except IOError:
         os.system("python -m spacy download en_core_web_sm")
         spacy_en = spacy.load("en_core_web_sm")
-    
+
     return spacy_de, spacy_en
 
 
@@ -1367,12 +1377,16 @@ def yield_tokens(data_iter, tokenizer, index):
     for from_to_tuple in data_iter:
         yield tokenizer(from_to_tuple[index])
 
+
 # %% id="jU3kVlV5okC-" tags=[]
 
 
 def build_vocabulary(spacy_de, spacy_en):
-    tokenize_de = lambda text: tokenize(text, spacy_de)
-    tokenize_en = lambda text: tokenize(text, spacy_en)
+    def tokenize_de(text):
+        return tokenize(text, spacy_de)
+
+    def tokenize_en(text):
+        return tokenize(text, spacy_en)
 
     print("Building German Vocabulary ...")
     train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
@@ -1406,6 +1420,7 @@ def load_vocab(spacy_de, spacy_en):
     print(len(vocab_src))
     print(len(vocab_tgt))
     return vocab_src, vocab_tgt
+
 
 if is_interactive_notebook():
     # global variables used later in the script
@@ -1484,7 +1499,7 @@ def collate_batch(
 
     src = torch.stack(src_list)
     tgt = torch.stack(tgt_list)
-    return (src, tgt)    
+    return (src, tgt)
 
 
 # %% id="ka2Ce_WIokC_" tags=[]
@@ -1520,11 +1535,17 @@ def create_dataloaders(
     train_iter, valid_iter, test_iter = datasets.IWSLT2016(
         language_pair=("de", "en")
     )
-    
-    train_iter_map = to_map_style_dataset(train_iter) # DistributedSampler needs a dataset len()
-    train_sampler = DistributedSampler(train_iter_map) if is_distributed else None
+
+    train_iter_map = to_map_style_dataset(
+        train_iter
+    )  # DistributedSampler needs a dataset len()
+    train_sampler = (
+        DistributedSampler(train_iter_map) if is_distributed else None
+    )
     valid_iter_map = to_map_style_dataset(valid_iter)
-    valid_sampler = DistributedSampler(valid_iter_map) if is_distributed else None
+    valid_sampler = (
+        DistributedSampler(valid_iter_map) if is_distributed else None
+    )
 
     train_dataloader = DataLoader(
         train_iter_map,
@@ -1548,13 +1569,7 @@ def create_dataloaders(
 
 # %%
 def train_worker(
-    gpu,
-    ngpus_per_node,
-    vocab_src,
-    vocab_tgt,
-    spacy_de,
-    spacy_en,
-    config
+    gpu, ngpus_per_node, vocab_src, vocab_tgt, spacy_de, spacy_en, config
 ):
     print(f"Train worker process using GPU: {gpu} for training", flush=True)
     torch.cuda.set_device(gpu)
@@ -1576,7 +1591,7 @@ def train_worker(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
     criterion.cuda(gpu)
-    
+
     print(f"Creating dataloaders", flush=True)
 
     train_dataloader, valid_dataloader = create_dataloaders(
@@ -1585,21 +1600,23 @@ def train_worker(
         vocab_tgt,
         spacy_de,
         spacy_en,
-        batch_size=config['batch_size'] // ngpus_per_node,
-        max_padding=config['max_padding'],
+        batch_size=config["batch_size"] // ngpus_per_node,
+        max_padding=config["max_padding"],
     )
     print(f"Creating optimizer")
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=config['base_lr'], betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=config["base_lr"], betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
-        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=config['warmup']),
+        lr_lambda=lambda step: rate(
+            step, d_model, factor=1, warmup=config["warmup"]
+        ),
     )
     train_state = TrainState()
 
-    for epoch in range(config['num_epochs']):
+    for epoch in range(config["num_epochs"]):
 
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
@@ -1613,13 +1630,13 @@ def train_worker(
             optimizer,
             lr_scheduler,
             mode="train+log",
-            accum_iter=config['accum_iter'],
+            accum_iter=config["accum_iter"],
             train_state=train_state,
         )
 
         GPUtil.showUtilization()
         if is_main_process:
-            file_path = "%s%.2d.pt" % (config['file_prefix'], epoch)
+            file_path = "%s%.2d.pt" % (config["file_prefix"], epoch)
             torch.save(module.state_dict(), file_path)
         torch.cuda.empty_cache()
 
@@ -1635,17 +1652,18 @@ def train_worker(
         )
         print(sloss)
         torch.cuda.empty_cache()
-        
+
     print(f"train worker finished")
 
     if is_main_process:
-        file_path = "%sfinal.pt" % config['file_prefix']
+        file_path = "%sfinal.pt" % config["file_prefix"]
         torch.save(module.state_dict(), file_path)
 
 
 # %% tags=[]
 def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
-    from the_annotated_transformer import train_worker    
+    from the_annotated_transformer import train_worker
+
     ngpus = torch.cuda.device_count()
     os.environ["MASTER_ADDR"] = "localhost"
     os.environ["MASTER_PORT"] = "12356"
@@ -1836,7 +1854,7 @@ def check_outputs(
 
 def run_model_example(n_examples=5):
     global vocab_src, vocab_tgt, spacy_de, spacy_en
-    
+
     print("Preparing Data ...")
     _, valid_dataloader = create_dataloaders(
         torch.device("cpu"),
@@ -1854,7 +1872,7 @@ def run_model_example(n_examples=5):
     model.load_state_dict(
         torch.load("iwslt_model_final.pt", map_location=torch.device("cpu"))
     )
-    
+
     print("Checking Model Outputs:")
     example_data = check_outputs(
         valid_dataloader, model, vocab_src, vocab_tgt, n_examples=n_examples
@@ -1957,18 +1975,6 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
         | charts[7]
         # layer + 1 due to 0-indexing
     ).properties(title="Layer %d" % (layer + 1))
-
-
-# %%
-def test_model():
-    model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(
-        torch.load("iwslt_sd_final.pt", map_location=torch.device("cpu"))
-    )
-    example_data = check_outputs(
-        valid_dataloader, model, vocab_src, vocab_tgt, n_examples=1
-    )
-    return model
 
 
 # %% [markdown]
