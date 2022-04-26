@@ -88,6 +88,10 @@ from torch.nn.parallel import DistributedDataParallel as DDP
 # Set to False to skip notebook execution (e.g. for debugging)
 RUN_EXAMPLES = True 
 
+
+# %%
+# Some convenience helper functions used throughout the notebook
+
 def is_interactive_notebook():
     return __name__ == "__main__"
 
@@ -99,7 +103,7 @@ def execute_example(fn, args=[]):
     if __name__ == "__main__" and RUN_EXAMPLES:
         fn(*args)
 
-class NoopOptimizer(torch.optim.Optimizer):
+class DummyOptimizer(torch.optim.Optimizer):
     def __init__(self):
         self.param_groups = [{"lr": 0}]
         None
@@ -111,7 +115,7 @@ class NoopOptimizer(torch.optim.Optimizer):
         None
 
 
-class NoopScheduler:
+class DummyScheduler:
     def step(self):
         None
 
@@ -1272,25 +1276,23 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
 # %% id="qgIZ2yEtdYwe" tags=[]
 # Train the simple copy task.
 
-
 def example_simple_model():
     V = 11
     criterion = LabelSmoothing(size=V, padding_idx=0, smoothing=0.0)
     model = make_model(V, V, N=2)
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=1.0, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=0.5, betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
         lr_lambda=lambda step: rate(
-            step, model_size=model.src_embed[0].d_model, factor=1.0, warmup=200
+            step, model_size=model.src_embed[0].d_model, factor=1.0, warmup=400
         ),
     )
 
-    batch_size = 60
+    batch_size = 80
     for epoch in range(20):
-        print(f"Epoch {epoch}")
         model.train()
         run_epoch(
             data_gen(V, batch_size, 20),
@@ -1305,8 +1307,8 @@ def example_simple_model():
             data_gen(V, batch_size, 5),
             model,
             SimpleLossCompute(model.generator, criterion),
-            NoopOptimizer(),
-            NoopScheduler(),
+            DummyOptimizer(),
+            DummyScheduler(),
             mode="eval",
         )[0]
 
@@ -1364,10 +1366,6 @@ def tokenize(text, tokenizer):
 def yield_tokens(data_iter, tokenizer, index):
     for from_to_tuple in data_iter:
         yield tokenizer(from_to_tuple[index])
-
-
-# %%
-train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
 
 # %% id="jU3kVlV5okC-" tags=[]
 
@@ -1545,17 +1543,9 @@ def create_dataloaders(
     return train_dataloader, valid_dataloader
 
 
-#
-# > Now we train the model. I will play with the warmup steps a bit,
-# > but everything else uses the default parameters.  On an AWS
-# > p3.8xlarge with 4 Tesla V100s, this runs at ~27,000 tokens per
-# > second with a batch size of 12,000
-
 # %% [markdown] id="90qM8RzCTsqM"
 # ## Training the System
 
-# %% id="Kx53VVTgTsqM" tags=[]
-# #!wget https://s3.amazonaws.com/opennmt-models/iwslt.pt
 # %%
 def train_worker(
     gpu,
@@ -1564,16 +1554,9 @@ def train_worker(
     vocab_tgt,
     spacy_de,
     spacy_en,
-    batch_size=64,
-    num_epochs=10,
-    accum_iter=12000 / 64,
-    base_lr=1.0,
-    max_padding=128,
-    warmup=2000,
-    file_prefix="iwslt",
+    config
 ):
-    print("train_worker called")
-    print(f"Using GPU: {gpu} for training")
+    print(f"Train worker process using GPU: {gpu} for training", flush=True)
     torch.cuda.set_device(gpu)
     is_main_process = gpu == 0
 
@@ -1594,7 +1577,7 @@ def train_worker(
     )
     criterion.cuda(gpu)
     
-    print(f"Creating dataloaders")
+    print(f"Creating dataloaders", flush=True)
 
     train_dataloader, valid_dataloader = create_dataloaders(
         gpu,
@@ -1602,28 +1585,27 @@ def train_worker(
         vocab_tgt,
         spacy_de,
         spacy_en,
-        batch_size=batch_size // ngpus_per_node,
-        max_padding=max_padding,
+        batch_size=config['batch_size'] // ngpus_per_node,
+        max_padding=config['max_padding'],
     )
     print(f"Creating optimizer")
 
     optimizer = torch.optim.Adam(
-        model.parameters(), lr=base_lr, betas=(0.9, 0.98), eps=1e-9
+        model.parameters(), lr=config['base_lr'], betas=(0.9, 0.98), eps=1e-9
     )
     lr_scheduler = LambdaLR(
         optimizer=optimizer,
-        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=warmup),
+        lr_lambda=lambda step: rate(step, d_model, factor=1, warmup=config['warmup']),
     )
     train_state = TrainState()
 
-    for epoch in range(num_epochs):
-        print(f"train worker epoch {epoch}")
+    for epoch in range(config['num_epochs']):
 
         train_dataloader.sampler.set_epoch(epoch)
         valid_dataloader.sampler.set_epoch(epoch)
 
         model.train()
-        print(f"[GPU{gpu}] Epoch {epoch} Training ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Training ====", flush=True)
         _, train_state = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in train_dataloader),
             model,
@@ -1631,24 +1613,24 @@ def train_worker(
             optimizer,
             lr_scheduler,
             mode="train+log",
-            accum_iter=accum_iter,
+            accum_iter=config['accum_iter'],
             train_state=train_state,
         )
 
         GPUtil.showUtilization()
         if is_main_process:
-            file_path = "%s%.2d.pt" % (file_prefix, epoch)
+            file_path = "%s%.2d.pt" % (config['file_prefix'], epoch)
             torch.save(module.state_dict(), file_path)
         torch.cuda.empty_cache()
 
-        print(f"[GPU{gpu}] Epoch {epoch} Validation ====")
+        print(f"[GPU{gpu}] Epoch {epoch} Validation ====", flush=True)
         model.eval()
         sloss = run_epoch(
             (Batch(b[0], b[1], pad_idx) for b in valid_dataloader),
             model,
             SimpleLossCompute(module.generator, criterion),
-            NoopOptimizer(),
-            NoopScheduler(),
+            DummyOptimizer(),
+            DummyScheduler(),
             mode="eval",
         )
         print(sloss)
@@ -1657,18 +1639,18 @@ def train_worker(
     print(f"train worker finished")
 
     if is_main_process:
-        file_path = "%sfinal.pt" % file_prefix
+        file_path = "%sfinal.pt" % config['file_prefix']
         torch.save(module.state_dict(), file_path)
 
 
 # %% tags=[]
-def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
+def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
     from the_annotated_transformer import train_worker    
     ngpus = torch.cuda.device_count()
     os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12355"
-    # set_trace()
-    print("Spawining training processes ...")
+    os.environ["MASTER_PORT"] = "12356"
+    print(f"Number of GPUs detected: {ngpus}")
+    print("Spawning training processes ...")
     mp.spawn(
         train_worker,
         nprocs=ngpus,
@@ -1678,7 +1660,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
             vocab_tgt,
             spacy_de,
             spacy_en,
-            *train_args.values(),
+            config,
         ),
     )
 
@@ -1686,8 +1668,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, train_args):
 def load_trained_model(create_model):
     config = {
         "batch_size": 150,
-        # "num_epochs": 50,
-        "num_epochs": 10,
+        "num_epochs": 8,
         "accum_iter": 10,
         "base_lr": 1.0,
         "max_padding": 72,
@@ -1703,7 +1684,7 @@ def load_trained_model(create_model):
     return model
 
 
-if __name__ == "__main__":
+if is_interactive_notebook():
     model = load_trained_model(create_model=True)
 
 
@@ -1977,9 +1958,6 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
         # layer + 1 due to 0-indexing
     ).properties(title="Layer %d" % (layer + 1))
 
-
-# %%
-# model.encoder.layers[0].self_attn
 
 # %%
 def test_model():
