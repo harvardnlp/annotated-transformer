@@ -13,60 +13,78 @@
 #     language: python
 #     name: python3
 # ---
-
-
 # %% [markdown] id="SX7UC-8jTsp7" tags=[]
 #
 # <center><h1>The Annotated Transformer</h1> </center>
 #
-# ![Main Figure](images/aiayn.png)
+# <img src="images/aiayn.png" width="70%"/>
+#
+# * v2022: Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak, and Stella Athena.
+# * [Original](https://nlp.seas.harvard.edu/2018/04/03/attention.html): [Sasha Rush](http://rush-nlp.com/).
+# 
 #
 # The Transformer from ["Attention is All You
 # Need"](https://arxiv.org/abs/1706.03762) has been on a lot of
-# people's minds over the last year. Besides producing major
-# improvements in translation quality, it provides a new architecture
-# for many other NLP tasks. The paper itself is very clearly written,
-# but the conventional wisdom has been that it is quite difficult to
-# implement correctly.
-#
-# In this post I present an "annotated" version of the paper in the
-# form of a line-by-line implementation. I have reordered and deleted
-# some sections from the original paper and added comments
+# people's minds over the <s>last year</s> five years. 
+# In this post presents an "annotated" version of the paper in the
+# form of a line-by-line implementation. It reorders and deletes
+# some sections from the original paper and adds comments
 # throughout. This document itself is a working notebook, and should
-# be a completely usable implementation. In total there are 400 lines
-# of library code which can process 27,000 tokens per second on 4
-# GPUs.
-#
-# To follow along you will first need to install
-# [PyTorch](http://pytorch.org/). The complete notebook is also
-# available on
-# [github](https://github.com/harvardnlp/annotated-transformer) or on
-# Google
-# [Colab](https://drive.google.com/file/d/1xQXSv6mtAOLXxEMi8RvaW8TW-7bvYBDF/view?usp=sharing).
-#
-# Note this is merely a starting point for researchers and interested
-# developers. The code here is based heavily on our
-# [OpenNMT](http://opennmt.net) packages. (If helpful feel free to
-# [cite](#conclusion).) For other full-sevice implementations of the
-# model check-out
-# [Tensor2Tensor](https://github.com/tensorflow/tensor2tensor)
-# (tensorflow) and [Sockeye](https://github.com/awslabs/sockeye)
-# (mxnet).
-#
-# - Alexander Rush ([@harvardnlp](https://twitter.com/harvardnlp) or
-# - srush@seas.harvard.edu)
+# be a completely usable implementation.
+# Note this is merely a starting for researchers and interested
+# developers.
 #
 
+
+
 # %% [markdown] id="RSntDwKhTsp-"
-# Table of Contents
-#
-#
-# * Table of Contents
-# {:toc}
+# <h3> Table of Contents </h3>
+# <ul>
+# <li><a href="#prelims">Prelims</a></li>
+# <li><a href="#background">Background</a></li>
+# <li><a href="#part-1-model-architecture">Part 1: Model Architecture</a></li>
+# <li><a href="#model-architecture">Model Architecture</a><ul>
+# <li><a href="#encoder-and-decoder-stacks">Encoder and Decoder Stacks</a></li>
+# <li><a href="#position-wise-feed-forward-networks">Position-wise Feed-Forward Networks</a></li>
+# <li><a href="#embeddings-and-softmax">Embeddings and Softmax</a></li>
+# <li><a href="#positional-encoding">Positional Encoding</a></li>
+# <li><a href="#full-model">Full Model</a></li>
+# <li><a href="#inference">Inference:</a></li>
+# </ul></li>
+# <li><a href="#part-2-model-training">Part 2: Model Training</a></li>
+# <li><a href="#training">Training</a><ul>
+# <li><a href="#batches-and-masking">Batches and Masking</a></li>
+# <li><a href="#training-loop">Training Loop</a></li>
+# <li><a href="#training-data-and-batching">Training Data and Batching</a></li>
+# <li><a href="#hardware-and-schedule">Hardware and Schedule</a></li>
+# <li><a href="#optimizer">Optimizer</a></li>
+# <li><a href="#regularization">Regularization</a></li>
+# </ul></li>
+# <li><a href="#a-first-example">A First Example</a><ul>
+# <li><a href="#synthetic-data">Synthetic Data</a></li>
+# <li><a href="#loss-computation">Loss Computation</a></li>
+# <li><a href="#greedy-decoding">Greedy Decoding</a></li>
+# </ul></li>
+# <li><a href="#part-3-a-real-world-example">Part 3: A Real World Example</a><ul>
+# <li><a href="#data-loading">Data Loading</a></li>
+# <li><a href="#iterators">Iterators</a></li>
+# <li><a href="#training-the-system">Training the System</a></li>
+# </ul></li>
+# <li><a href="#additional-components-bpe-search-averaging">Additional Components: BPE, Search, Averaging</a></li>
+# <li><a href="#results">Results</a><ul>
+# <li><a href="#attention-visualization">Attention Visualization</a></li>
+# <li><a href="#encoder-self-attention">Encoder Self Attention</a></li>
+# <li><a href="#decoder-self-attention">Decoder Self Attention</a></li>
+# <li><a href="#decoder-src-attention">Decoder Src Attention</a></li>
+# </ul></li>
+# <li><a href="#conclusion">Conclusion</a></li>
+# </ul>
 
 
 # %% [markdown] id="BhmOhn9lTsp8"
 # # Prelims
+#
+# <a href="#background">Skip</a>
 
 # %% id="NwClcbH6Tsp8"
 # # !pip install -r requirements.txt
@@ -462,8 +480,8 @@ show_example(example_mask)
 # with all keys, divide each by $\sqrt{d_k}$, and apply a softmax
 # function to obtain the weights on the values.
 #
-
-# %% [markdown]
+#
+#
 # ![](images/ModalNet-19.png)
 
 
@@ -516,7 +534,7 @@ def attention(query, key, value, mask=None, dropout=None):
 # variables with mean $0$ and variance $1$.  Then their dot product,
 # $q \cdot k = \sum_{i=1}^{d_k} q_ik_i$, has mean $0$ and variance
 # $d_k$.). To counteract this effect, we scale the dot products by
-# $\frac{1}{\sqrt{d_k}}$.  %% [markdown] id="xBebydBcTsqG"
+# $\frac{1}{\sqrt{d_k}}$.  
 #
 #
 
@@ -689,9 +707,9 @@ class Embeddings(nn.Module):
 #
 # In this work, we use sine and cosine functions of different frequencies:
 #
-# $$PE_{(pos,2i)} = sin(pos / 10000^{2i/d_{\text{model}}})$$
+# $$PE_{(pos,2i)} = \sin(pos / 10000^{2i/d_{\text{model}}})$$
 #
-# $$PE_{(pos,2i+1)} = cos(pos / 10000^{2i/d_{\text{model}}})$$
+# $$PE_{(pos,2i+1)} = \cos(pos / 10000^{2i/d_{\text{model}}})$$
 #
 # where $pos$ is the position and $i$ is the dimension.  That is, each
 # dimension of the positional encoding corresponds to a sinusoid.  The
@@ -2071,9 +2089,9 @@ show_example(viz_decoder_src)
 # %% [markdown] id="nSseuCcATsqO"
 # # Conclusion
 #
-# > Hopefully this code is useful for future research. Please reach
-# > out if you have any issues.
+#  Hopefully this code is useful for future research. Please reach
+#  out if you have any issues.
 #
 #
-# > Cheers,
-# > srush
+#  Cheers,
+#  Sasha Rush, Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak, Stella Athena
