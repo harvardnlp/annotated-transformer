@@ -29,7 +29,7 @@
 # 
 #
 # The Transformer has been on a lot of
-# people's minds over the <s>last year</s> five years. 
+# people's minds over the last <s>year</s> five years. 
 # This post presents an annotated version of the paper in the
 # form of a line-by-line implementation. It reorders and deletes
 # some sections from the original paper and adds comments
@@ -110,6 +110,8 @@ from torchtext.vocab import build_vocab_from_iterator
 import torchtext.datasets as datasets
 import spacy
 import GPUtil
+import warnings
+warnings.filterwarnings("ignore")
 
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
@@ -463,6 +465,7 @@ def example_mask():
             alt.Y("Masking:O"),
             alt.Color("Subsequent Mask:Q", scale=alt.Scale(scheme="viridis")),
         )
+        .interactive()
     )
 
 
@@ -781,6 +784,7 @@ def example_positional():
         .mark_line()
         .properties(width=800)
         .encode(x="position", y="embedding", color="dimension:N")
+        .interactive()
     )
 
 
@@ -1103,6 +1107,7 @@ def example_learning_schedule():
         .mark_line()
         .properties(width=600)
         .encode(x="step", y="Learning Rate", color="model_size:warmup:N")
+        .interactive()
     )
 
 
@@ -1198,6 +1203,7 @@ def example_label_smoothing():
                 "target distribution:Q", scale=alt.Scale(scheme="viridis")
             ),
         )
+        .interactive()
     )
 
 
@@ -1235,6 +1241,7 @@ def penalization_visualization():
             x="Steps",
             y="Loss",
         )
+        .interactive()
     )
 
 
@@ -1950,7 +1957,7 @@ def attn_map(attn, layer, head, row_tokens, col_tokens, max_dim=30):
             color="value",
             tooltip=["row", "column", "value", "row_token", "col_token"],
         )
-        .properties(height=200, width=200)
+        .properties(height=400, width=400)
         .interactive()
     )
 
@@ -1986,13 +1993,13 @@ def visualize_layer(model, layer, getter_fn, ntokens, row_tokens, col_tokens):
     assert n_heads == 8
     return alt.vconcat(
         charts[0]
-        | charts[1]
+        # | charts[1]
         | charts[2]
-        | charts[3]
+        # | charts[3]
         | charts[4]
-        | charts[5]
+        # | charts[5]
         | charts[6]
-        | charts[7]
+        # | charts[7]
         # layer + 1 due to 0-indexing
     ).properties(title="Layer %d" % (layer + 1))
 
@@ -2015,11 +2022,11 @@ def viz_encoder_self():
     ]
     return alt.hconcat(
         layer_viz[0]
-        & layer_viz[1]
+        # & layer_viz[1]
         & layer_viz[2]
-        & layer_viz[3]
+        # & layer_viz[3]
         & layer_viz[4]
-        & layer_viz[5]
+        # & layer_viz[5]
     )
 
 
