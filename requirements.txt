@@ -1,6 +1,6 @@
 --find-links https://download.pytorch.org/whl/torch_stable.html
 
-pandas==1.4.0
+pandas==1.3.5
 torch==1.11.0+cu113
 torchdata==0.3.0
 torchtext==0.12
