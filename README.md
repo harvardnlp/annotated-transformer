@@ -1,6 +1,10 @@
 Code for The Annotated Transformer blog post:
 
-http://nlp.seas.harvard.edu/2018/04/03/attention.html
+http://nlp.seas.harvard.edu/annotated-transformer/
+
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/harvardnlp/annotated-transformer/AnnotatedTransformer.ipynb]
+
+
 
 # Package Dependencies
 
