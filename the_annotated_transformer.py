@@ -92,6 +92,15 @@
 # %% id="NwClcbH6Tsp8"
 # # !pip install -r requirements.txt
 
+# %% id="NwClcbH6Tsp8"
+# # Uncomment for colab
+# # 
+# # !pip install -qqq pandas==1.3.5 torch==1.11.0+cu113 torchdata==0.3.0 torchtext==0.12 spacy==3.2 altair==4.1 GPUtil
+# # !python -m spacy download de_core_news_sm
+# # !python -m spacy download en_core_web_sm
+# # !wget https://raw.githubusercontent.com/harvardnlp/annotated-transformer/master/multi30k_model_final.pt
+
+
 # %% id="v1-1MX6oTsp9"
 import os
 from os.path import exists
@@ -1366,7 +1375,7 @@ def example_simple_model():
 # %% [markdown] id="OpuQv2GsTsqL"
 # # Part 3: A Real World Example
 #
-# > Now we consider a real-world example using the IWSLT
+# > Now we consider a real-world example using the Multi30k
 # > German-English Translation task. This task is much smaller than
 # > the WMT task considered in the paper, but it illustrates the whole
 # > system. We also show how to use multi-gpu processing to make it
@@ -1421,7 +1430,7 @@ def build_vocabulary(spacy_de, spacy_en):
         return tokenize(text, spacy_en)
 
     print("Building German Vocabulary ...")
-    train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+    train, val, test = datasets.Multi30k(language_pair=("de", "en"))
     vocab_src = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_de, index=0),
         min_freq=2,
@@ -1429,7 +1438,7 @@ def build_vocabulary(spacy_de, spacy_en):
     )
 
     print("Building English Vocabulary ...")
-    train, val, test = datasets.IWSLT2016(language_pair=("de", "en"))
+    train, val, test = datasets.Multi30k(language_pair=("de", "en"))
     vocab_tgt = build_vocab_from_iterator(
         yield_tokens(train + val + test, tokenize_en, index=1),
         min_freq=2,
@@ -1564,7 +1573,7 @@ def create_dataloaders(
             pad_id=vocab_src.get_stoi()["<blank>"],
         )
 
-    train_iter, valid_iter, test_iter = datasets.IWSLT2016(
+    train_iter, valid_iter, test_iter = datasets.Multi30k(
         language_pair=("de", "en")
     )
 
@@ -1612,6 +1621,7 @@ def train_worker(
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.cuda(gpu)
     module = model
+    is_main_process = True
     if is_distributed:
         dist.init_process_group(
             "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
@@ -1729,19 +1739,19 @@ def load_trained_model(create_model):
         "base_lr": 1.0,
         "max_padding": 72,
         "warmup": 3000,
-        "file_prefix": "iwslt_model_",
+        "file_prefix": "multi30k_model_",
     }
 
     if create_model:
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
 
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
-    model.load_state_dict(torch.load("iwslt_model_final.pt"))
+    model.load_state_dict(torch.load("multi30k_model_final.pt"))
     return model
 
 
 if is_interactive_notebook():
-    model = load_trained_model(create_model=True)
+    model = load_trained_model(create_model=False)
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
@@ -1791,11 +1801,9 @@ if False:
 # %% [markdown] id="xDKJsSwRTsqN"
 #
 # > 3) Beam Search: This is a bit too complicated to cover here. See
-# > the [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/blob/
-#
-# /onmt/translate/Beam.py) for a pytorch implementation.
-#
-#
+# > the [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/blob/onmt/translate/Beam.py) for a pytorch implementation.
+# >
+# 
 
 # %% [markdown] id="wf3vVYGZTsqN"
 #
@@ -1834,9 +1842,6 @@ def average(model, models):
 
 # %% [markdown] id="cPcnsHvQTsqO"
 #
-# > The code we have written here is a version of the base
-# > model. There are fully trained version of this system available
-# > here [(Example Models)](http://opennmt.net/Models-py/).
 #
 # > With the addtional extensions in the last section, the OpenNMT-py
 # > replication gets to 26.9 on EN-DE WMT. Here I have loaded in those
@@ -1908,7 +1913,7 @@ def run_model_example(n_examples=5):
 
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.load_state_dict(
-        torch.load("iwslt_model_final.pt", map_location=torch.device("cpu"))
+        torch.load("multi30k_model_final.pt", map_location=torch.device("cpu"))
     )
 
     print("Checking Model Outputs:")
