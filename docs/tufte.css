@@ -48,19 +48,19 @@ body { width: 58rem;
 h1 { font-weight: 400;
      margin-top: 4rem;
      margin-bottom: 1.5rem;
-     font-size: 3.2rem;
+     font-size: 3rem;
      line-height: 1; }
 
 h2 { 
      font-weight: 400;
      margin-top: 2.1rem;
      margin-bottom: 0;
-     font-size: 2.2rem;
+     font-size: 2rem;
      line-height: 1; }
 
 h3 { 
      font-weight: 400;
-     font-size: 1.7rem;
+     font-size: 1.4rem;
      margin-top: 2rem;
      margin-bottom: 0;
      line-height: 1; }
@@ -82,7 +82,7 @@ article { position: relative;
 section { padding-top: 1rem;
           padding-bottom: 1rem; }
 
-p, ol, ul { font-size: 1.4rem; }
+p, ol, ul { font-size: 1.2rem; }
 
 p { line-height: 2rem;
     margin-top: 1.4rem;
