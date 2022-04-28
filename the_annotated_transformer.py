@@ -17,22 +17,25 @@
 #
 # <center><h1>The Annotated Transformer</h1> </center>
 #
+#
+# <center>
+# <p><a href="https://arxiv.org/abs/1706.03762">Attention is All You Need</a></p>
+# </center>
+#
 # <img src="images/aiayn.png" width="70%"/>
 #
-# * v2022: Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak, and Stella Athena.
-# * [Original](https://nlp.seas.harvard.edu/2018/04/03/attention.html): [Sasha Rush](http://rush-nlp.com/).
+# * *v2022: Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak, and Stella Athena.*
+# * *[Original](https://nlp.seas.harvard.edu/2018/04/03/attention.html): [Sasha Rush](http://rush-nlp.com/).*
 # 
 #
-# The Transformer from ["Attention is All You
-# Need"](https://arxiv.org/abs/1706.03762) has been on a lot of
+# The Transformer has been on a lot of
 # people's minds over the <s>last year</s> five years. 
-# In this post presents an "annotated" version of the paper in the
+# This post presents an annotated version of the paper in the
 # form of a line-by-line implementation. It reorders and deletes
 # some sections from the original paper and adds comments
 # throughout. This document itself is a working notebook, and should
 # be a completely usable implementation.
-# Note this is merely a starting for researchers and interested
-# developers.
+# Code is available [here](https://github.com/harvardnlp/annotated-transformer/).
 #
 
 
