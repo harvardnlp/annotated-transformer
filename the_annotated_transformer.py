@@ -1601,24 +1601,25 @@ def create_dataloaders(
 
 # %%
 def train_worker(
-    gpu, ngpus_per_node, vocab_src, vocab_tgt, spacy_de, spacy_en, config
+        gpu, ngpus_per_node, vocab_src, vocab_tgt, spacy_de, spacy_en, config,
+        is_distributed=False
 ):
     print(f"Train worker process using GPU: {gpu} for training", flush=True)
     torch.cuda.set_device(gpu)
-    is_main_process = gpu == 0
 
     pad_idx = vocab_tgt["<blank>"]
     d_model = 512
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
     model.cuda(gpu)
     module = model
-
-    dist.init_process_group(
-        "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
-    )
-    model = DDP(model, device_ids=[gpu])
-    module = model.module
-
+    if is_distributed:
+        dist.init_process_group(
+            "nccl", init_method="env://", rank=gpu, world_size=ngpus_per_node
+        )
+        model = DDP(model, device_ids=[gpu])
+        module = model.module
+        is_main_process = gpu == 0
+        
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
@@ -1632,6 +1633,7 @@ def train_worker(
         spacy_en,
         batch_size=config["batch_size"] // ngpus_per_node,
         max_padding=config["max_padding"],
+        is_distributed=is_distributed
     )
 
     optimizer = torch.optim.Adam(
@@ -1646,9 +1648,9 @@ def train_worker(
     train_state = TrainState()
 
     for epoch in range(config["num_epochs"]):
-
-        train_dataloader.sampler.set_epoch(epoch)
-        valid_dataloader.sampler.set_epoch(epoch)
+        if is_distributed:
+            train_dataloader.sampler.set_epoch(epoch)
+            valid_dataloader.sampler.set_epoch(epoch)
 
         model.train()
         print(f"[GPU{gpu}] Epoch {epoch} Training ====", flush=True)
@@ -1690,29 +1692,38 @@ def train_worker(
 # %% tags=[]
 def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
     from the_annotated_transformer import train_worker
-
-    ngpus = torch.cuda.device_count()
-    os.environ["MASTER_ADDR"] = "localhost"
-    os.environ["MASTER_PORT"] = "12356"
-    print(f"Number of GPUs detected: {ngpus}")
-    print("Spawning training processes ...")
-    mp.spawn(
-        train_worker,
-        nprocs=ngpus,
-        args=(
-            ngpus,
-            vocab_src,
-            vocab_tgt,
-            spacy_de,
-            spacy_en,
-            config,
-        ),
-    )
-
+    if config["distributed"]:
+        ngpus = torch.cuda.device_count()
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = "12356"
+        print(f"Number of GPUs detected: {ngpus}")
+        print("Spawning training processes ...")
+        mp.spawn(
+            train_worker,
+            nprocs=ngpus,
+            args=(
+                ngpus,
+                vocab_src,
+                vocab_tgt,
+                spacy_de,
+                spacy_en,
+                config,
+                True
+            ),
+        )
+    else:
+        train_worker(0, 1, vocab_src,
+                     vocab_tgt,
+                     spacy_de,
+                     spacy_en,
+                     config,
+                     False
+        )
 
 def load_trained_model(create_model):
     config = {
         "batch_size": 32,
+        "distributed": False,
         "num_epochs": 8,
         "accum_iter": 10,
         "base_lr": 1.0,
@@ -1730,7 +1741,7 @@ def load_trained_model(create_model):
 
 
 if is_interactive_notebook():
-    model = load_trained_model(create_model=False)
+    model = load_trained_model(create_model=True)
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
