@@ -14,10 +14,12 @@
 #     name: python3
 # ---
 
-# %% [markdown] tags=[]
-# #### ![Main Figure](images/aiayn.png)
 
 # %% [markdown] id="SX7UC-8jTsp7" tags=[]
+#
+# <center><h1>The Annotated Transformer</h1> </center>
+#
+# ![Main Figure](images/aiayn.png)
 #
 # The Transformer from ["Attention is All You
 # Need"](https://arxiv.org/abs/1706.03762) has been on a lot of
@@ -54,6 +56,14 @@
 # - Alexander Rush ([@harvardnlp](https://twitter.com/harvardnlp) or
 # - srush@seas.harvard.edu)
 #
+
+# %% [markdown] id="RSntDwKhTsp-"
+# Table of Contents
+#
+#
+# * Table of Contents
+# {:toc}
+
 
 # %% [markdown] id="BhmOhn9lTsp8"
 # # Prelims
@@ -124,12 +134,6 @@ class DummyScheduler:
         None
 
 
-# %% [markdown] id="RSntDwKhTsp-"
-# Table of Contents
-#
-#
-# * Table of Contents
-# {:toc}
 
 # %% [markdown] id="jx49WRyfTsp-"
 # > My comments are blockquoted. The main text is all from the paper itself.
@@ -1328,7 +1332,7 @@ def example_simple_model():
     print(greedy_decode(model, src, src_mask, max_len=max_len, start_symbol=0))
 
 
-execute_example(example_simple_model)
+# execute_example(example_simple_model)
 
 
 # %% [markdown] id="OpuQv2GsTsqL"
@@ -1680,7 +1684,7 @@ def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
 
 def load_trained_model(create_model):
     config = {
-        "batch_size": 150,
+        "batch_size": 32,
         "num_epochs": 8,
         "accum_iter": 10,
         "base_lr": 1.0,
@@ -1698,7 +1702,7 @@ def load_trained_model(create_model):
 
 
 if is_interactive_notebook():
-    model = load_trained_model(create_model=True)
+    model = load_trained_model(create_model=False)
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
@@ -1875,7 +1879,7 @@ def run_model_example(n_examples=5):
     return model, example_data
 
 
-execute_example(run_model_example)
+# execute_example(run_model_example)
 
 
 # %% [markdown] id="0ZkkNTKLTsqO"
