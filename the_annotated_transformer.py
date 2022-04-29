@@ -98,7 +98,6 @@
 # # !pip install -qqq pandas==1.3.5 torch==1.11.0+cu113 torchdata==0.3.0 torchtext==0.12 spacy==3.2 altair==4.1 GPUtil
 # # !python -m spacy download de_core_news_sm
 # # !python -m spacy download en_core_web_sm
-# # !wget https://raw.githubusercontent.com/harvardnlp/annotated-transformer/master/multi30k_model_final.pt
 
 
 # %% id="v1-1MX6oTsp9"
@@ -1751,7 +1750,7 @@ def load_trained_model(create_model):
 
 
 if is_interactive_notebook():
-    model = load_trained_model(create_model=False)
+    model = load_trained_model(create_model=True)
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
