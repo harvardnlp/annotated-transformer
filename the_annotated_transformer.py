@@ -1700,6 +1700,7 @@ def train_worker(
 
 # %% tags=[]
 def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
+    from the_annotated_transformer import train_worker
 
     if config["distributed"]:
         ngpus = torch.cuda.device_count()
