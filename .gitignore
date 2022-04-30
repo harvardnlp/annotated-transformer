@@ -1,4 +1,4 @@
-.ipynb
+*.ipynb
 .ipynb_checkpoints
 .data
 *.pt
