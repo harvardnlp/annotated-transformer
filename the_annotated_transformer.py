@@ -19,25 +19,28 @@
 #
 #
 # <center>
-# <p><a href="https://arxiv.org/abs/1706.03762">Attention is All You Need</a></p>
+# <p><a href="https://arxiv.org/abs/1706.03762">Attention is All You Need
+# </a></p>
 # </center>
 #
 # <img src="images/aiayn.png" width="70%"/>
 #
-# * *v2022: Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak, and Stella Athena.*
-# * *[Original](https://nlp.seas.harvard.edu/2018/04/03/attention.html): [Sasha Rush](http://rush-nlp.com/).*
-# 
+# * *v2022: Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak,
+#    and Stella Athena.*
+# * *[Original](https://nlp.seas.harvard.edu/2018/04/03/attention.html):
+#    [Sasha Rush](http://rush-nlp.com/).*
+#
 #
 # The Transformer has been on a lot of
-# people's minds over the last <s>year</s> five years. 
+# people's minds over the last <s>year</s> five years.
 # This post presents an annotated version of the paper in the
 # form of a line-by-line implementation. It reorders and deletes
 # some sections from the original paper and adds comments
 # throughout. This document itself is a working notebook, and should
 # be a completely usable implementation.
-# Code is available [here](https://github.com/harvardnlp/annotated-transformer/).
+# Code is available
+# [here](https://github.com/harvardnlp/annotated-transformer/).
 #
-
 
 
 # %% [markdown] id="RSntDwKhTsp-"
@@ -48,7 +51,8 @@
 # <li><a href="#part-1-model-architecture">Part 1: Model Architecture</a></li>
 # <li><a href="#model-architecture">Model Architecture</a><ul>
 # <li><a href="#encoder-and-decoder-stacks">Encoder and Decoder Stacks</a></li>
-# <li><a href="#position-wise-feed-forward-networks">Position-wise Feed-Forward Networks</a></li>
+# <li><a href="#position-wise-feed-forward-networks">Position-wise Feed-Forward
+# Networks</a></li>
 # <li><a href="#embeddings-and-softmax">Embeddings and Softmax</a></li>
 # <li><a href="#positional-encoding">Positional Encoding</a></li>
 # <li><a href="#full-model">Full Model</a></li>
@@ -68,12 +72,14 @@
 # <li><a href="#loss-computation">Loss Computation</a></li>
 # <li><a href="#greedy-decoding">Greedy Decoding</a></li>
 # </ul></li>
-# <li><a href="#part-3-a-real-world-example">Part 3: A Real World Example</a><ul>
+# <li><a href="#part-3-a-real-world-example">Part 3: A Real World Example</a>
+# <ul>
 # <li><a href="#data-loading">Data Loading</a></li>
 # <li><a href="#iterators">Iterators</a></li>
 # <li><a href="#training-the-system">Training the System</a></li>
 # </ul></li>
-# <li><a href="#additional-components-bpe-search-averaging">Additional Components: BPE, Search, Averaging</a></li>
+# <li><a href="#additional-components-bpe-search-averaging">Additional
+# Components: BPE, Search, Averaging</a></li>
 # <li><a href="#results">Results</a><ul>
 # <li><a href="#attention-visualization">Attention Visualization</a></li>
 # <li><a href="#encoder-self-attention">Encoder Self Attention</a></li>
@@ -94,8 +100,8 @@
 
 # %% id="NwClcbH6Tsp8"
 # # Uncomment for colab
-# # 
-# # !pip install -qqq pandas==1.3.5 torch==1.11.0+cu113 torchdata==0.3.0 torchtext==0.12 spacy==3.2 altair==4.1 GPUtil
+# #
+# # !pip install -q torchdata==0.3.0 torchtext==0.12 spacy==3.2 altair GPUtil
 # # !python -m spacy download de_core_news_sm
 # # !python -m spacy download en_core_web_sm
 
@@ -119,14 +125,14 @@ import torchtext.datasets as datasets
 import spacy
 import GPUtil
 import warnings
-warnings.filterwarnings("ignore")
-
 from torch.utils.data.distributed import DistributedSampler
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 
+
 # Set to False to skip notebook execution (e.g. for debugging)
+warnings.filterwarnings("ignore")
 RUN_EXAMPLES = True
 
 
@@ -163,7 +169,6 @@ class DummyOptimizer(torch.optim.Optimizer):
 class DummyScheduler:
     def step(self):
         None
-
 
 
 # %% [markdown] id="jx49WRyfTsp-"
@@ -548,7 +553,7 @@ def attention(query, key, value, mask=None, dropout=None):
 # variables with mean $0$ and variance $1$.  Then their dot product,
 # $q \cdot k = \sum_{i=1}^{d_k} q_ik_i$, has mean $0$ and variance
 # $d_k$.). To counteract this effect, we scale the dot products by
-# $\frac{1}{\sqrt{d_k}}$.  
+# $\frac{1}{\sqrt{d_k}}$.
 #
 #
 
@@ -902,7 +907,7 @@ show_example(run_tests)
 class Batch:
     """Object for holding a batch of data with mask during training."""
 
-    def __init__(self, src, tgt=None, pad=2):  # 2 = <blank> for IWST
+    def __init__(self, src, tgt=None, pad=2):  # 2 = <blank>
         self.src = src
         self.src_mask = (src != pad).unsqueeze(-2)
         if tgt is not None:
@@ -1609,8 +1614,14 @@ def create_dataloaders(
 
 # %%
 def train_worker(
-        gpu, ngpus_per_node, vocab_src, vocab_tgt, spacy_de, spacy_en, config,
-        is_distributed=False
+    gpu,
+    ngpus_per_node,
+    vocab_src,
+    vocab_tgt,
+    spacy_de,
+    spacy_en,
+    config,
+    is_distributed=False,
 ):
     print(f"Train worker process using GPU: {gpu} for training", flush=True)
     torch.cuda.set_device(gpu)
@@ -1628,7 +1639,7 @@ def train_worker(
         model = DDP(model, device_ids=[gpu])
         module = model.module
         is_main_process = gpu == 0
-        
+
     criterion = LabelSmoothing(
         size=len(vocab_tgt), padding_idx=pad_idx, smoothing=0.1
     )
@@ -1642,7 +1653,7 @@ def train_worker(
         spacy_en,
         batch_size=config["batch_size"] // ngpus_per_node,
         max_padding=config["max_padding"],
-        is_distributed=is_distributed
+        is_distributed=is_distributed,
     )
 
     optimizer = torch.optim.Adam(
@@ -1699,37 +1710,33 @@ def train_worker(
 
 
 # %% tags=[]
-def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
+def train_distributed_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
     from the_annotated_transformer import train_worker
+
+    ngpus = torch.cuda.device_count()
+    os.environ["MASTER_ADDR"] = "localhost"
+    os.environ["MASTER_PORT"] = "12356"
+    print(f"Number of GPUs detected: {ngpus}")
+    print("Spawning training processes ...")
+    mp.spawn(
+        train_worker,
+        nprocs=ngpus,
+        args=(ngpus, vocab_src, vocab_tgt, spacy_de, spacy_en, config, True),
+    )
+
+
+def train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config):
     if config["distributed"]:
-        ngpus = torch.cuda.device_count()
-        os.environ["MASTER_ADDR"] = "localhost"
-        os.environ["MASTER_PORT"] = "12356"
-        print(f"Number of GPUs detected: {ngpus}")
-        print("Spawning training processes ...")
-        mp.spawn(
-            train_worker,
-            nprocs=ngpus,
-            args=(
-                ngpus,
-                vocab_src,
-                vocab_tgt,
-                spacy_de,
-                spacy_en,
-                config,
-                True
-            ),
+        train_distributed_model(
+            vocab_src, vocab_tgt, spacy_de, spacy_en, config
         )
     else:
-        train_worker(0, 1, vocab_src,
-                     vocab_tgt,
-                     spacy_de,
-                     spacy_en,
-                     config,
-                     False
+        train_worker(
+            0, 1, vocab_src, vocab_tgt, spacy_de, spacy_en, config, False
         )
 
-def load_trained_model(create_model):
+
+def load_trained_model():
     config = {
         "batch_size": 32,
         "distributed": False,
@@ -1740,8 +1747,8 @@ def load_trained_model(create_model):
         "warmup": 3000,
         "file_prefix": "multi30k_model_",
     }
-
-    if create_model:
+    model_path = "multi30k_model_final.pt"
+    if not exists(model_path):
         train_model(vocab_src, vocab_tgt, spacy_de, spacy_en, config)
 
     model = make_model(len(vocab_src), len(vocab_tgt), N=6)
@@ -1750,7 +1757,7 @@ def load_trained_model(create_model):
 
 
 if is_interactive_notebook():
-    model = load_trained_model(create_model=True)
+    model = load_trained_model()
 
 
 # %% [markdown] id="RZK_VjDPTsqN"
@@ -1799,10 +1806,11 @@ if False:
 
 # %% [markdown] id="xDKJsSwRTsqN"
 #
-# > 3) Beam Search: This is a bit too complicated to cover here. See
-# > the [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/blob/onmt/translate/Beam.py) for a pytorch implementation.
+# > 3) Beam Search: This is a bit too complicated to cover here. See the
+# > [OpenNMT-py](https://github.com/OpenNMT/OpenNMT-py/)
+# > for a pytorch implementation.
 # >
-# 
+#
 
 # %% [markdown] id="wf3vVYGZTsqN"
 #
@@ -2119,4 +2127,5 @@ show_example(viz_decoder_src)
 #
 #
 #  Cheers,
-#  Sasha Rush, Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak, Stella Athena
+#  Sasha Rush, Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak,
+#  Stella Athena
