@@ -199,7 +199,7 @@ class DummyScheduler:
 # comprehension, abstractive summarization, textual entailment and
 # learning task-independent sentence representations. End-to-end
 # memory networks are based on a recurrent attention mechanism instead
-# of sequencealigned recurrence and have been shown to perform well on
+# of sequence-aligned recurrence and have been shown to perform well on
 # simple-language question answering and language modeling tasks.
 #
 # To the best of our knowledge, however, the Transformer is the first
@@ -1852,7 +1852,7 @@ def average(model, models):
 #
 # > With the addtional extensions in the last section, the OpenNMT-py
 # > replication gets to 26.9 on EN-DE WMT. Here I have loaded in those
-# > parameters to our reimplemenation.
+# > parameters to our reimplementation.
 
 # %%
 # Load data and model for output checks
