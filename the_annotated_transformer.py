@@ -26,7 +26,7 @@
 # <img src="images/aiayn.png" width="70%"/>
 #
 # * *v2022: Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak,
-#    and Stella Athena.*
+#    and Stella Biderman.*
 # * *[Original](https://nlp.seas.harvard.edu/2018/04/03/attention.html):
 #    [Sasha Rush](http://rush-nlp.com/).*
 #
@@ -2128,4 +2128,4 @@ show_example(viz_decoder_src)
 #
 #  Cheers,
 #  Sasha Rush, Austin Huang, Suraj Subramanian, Jonathan Sum, Khalid Almubarak,
-#  Stella Athena
+#  Stella Biderman
