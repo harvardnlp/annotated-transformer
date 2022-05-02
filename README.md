@@ -4,6 +4,9 @@ http://nlp.seas.harvard.edu/annotated-transformer/
 
 [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/harvardnlp/annotated-transformer/blob/master/AnnotatedTransformer.ipynb)
 
+![image](https://user-images.githubusercontent.com/35882/166251887-9da909a9-660b-45a9-ae72-0aae89fb38d4.png)
+
+
 
 
 # Package Dependencies
