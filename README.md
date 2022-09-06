@@ -17,6 +17,14 @@ Use `requirements.txt` to install library dependencies with pip:
 pip install -r requirements.txt
 ```
 
+# Spin Up a Docker Container
+
+You can quickly spin up a docker container with all the dependecies you need.  
+
+```
+docker compose up -d
+```
+It will take some time when you will run this command for the first time. Once it has done, open you favourite browser and go to this page: `http://localhost:8989/` and use the **password token: `hi`** .
 
 # Notebook Setup
 

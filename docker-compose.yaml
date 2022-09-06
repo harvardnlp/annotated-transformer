@@ -1,0 +1,14 @@
+version: "3.8"
+services:
+  annotated-transformer:
+    build: .
+    ports:
+      - 8989:8888
+    volumes:
+      - ./main:/home/jovyan/work
+    environment:
+      - JUPYTER_TOKEN=hi
+      #GRANT_SUDO: "yes"
+    # enable sudo permissions
+    user: "root"
+    restart: always
