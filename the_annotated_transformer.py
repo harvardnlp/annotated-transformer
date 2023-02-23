@@ -1313,7 +1313,7 @@ class SimpleLossCompute:
 def greedy_decode(model, src, src_mask, max_len, start_symbol):
     memory = model.encode(src, src_mask)
     ys = torch.zeros(1, 1).fill_(start_symbol).type_as(src.data)
-    for i in range(max_len - 1):
+    for i in range(max_len):
         out = model.decode(
             memory, src_mask, ys, subsequent_mask(ys.size(1)).type_as(src.data)
         )
@@ -1323,7 +1323,9 @@ def greedy_decode(model, src, src_mask, max_len, start_symbol):
         ys = torch.cat(
             [ys, torch.zeros(1, 1).type_as(src.data).fill_(next_word)], dim=1
         )
-    return ys
+        
+    # Return the target sequence without the start symbol
+    return ys[:, 1:]
 
 
 # %% id="qgIZ2yEtdYwe" tags=[]
